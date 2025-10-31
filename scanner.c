@@ -117,38 +117,24 @@ int scan_specific_host(char* host,int first,int last){
 int main(int argc,char** argv){
  signal(SIGINT,process_end);
  if(argc<4){
-       fprintf(stderr,"Usage: ./scanner hostname first_port last_port");
-    }
-    if(allocate_data()<0){
-       fprintf(stderr,"Enviroment could not be set up");
-       _exit(deallocate_data());
-    }
-    strcpy(hostname,argv[1]);
-    *first=atoi(argv[2]);
-    *last=atoi(argv[3]);
-    if(strlen(hostname)==0){
-      fprintf(stderr,"Host cannot be null");
-      return -1;
-  }
-  if((*last-*first)/MAX_PORTS_PER_SOCKET>SOCKETS_NUMBER){
-        fprintf(stderr,"Cannot initialize more than %d sockets per process",MAX_FD_PER_PROCESS);
-        _exit(deallocate_data());
-    }
-    if(prepare_sockets(*first,*last)<0){
-       fprintf(stderr,"Could not prepare sockets for scanning\n");
-       _exit(deallocate_data());
-    }
-    for(int i=0;i<SOCKETS_NUMBER;i++){
-       fprintf(stdout,"sockets[%d]=%d",i,sockets[i]);
-    }
-    if(config_epoll()<0){
-       fprintf(stderr,"Could not set up epoll");
-       close_sockets(*first,*last);
-       close_epoll();
-       _exit(deallocate_data());
-    }
+    fprintf(stderr,"usage ./scanner ip start end");
+    _exit(1);
+ }
+ if(allocate_data()<0){
+    fprintf(stderr,"allocate_data()");
+    _exit(deallocate_data());
+ }
+ strcpy(hostname,argv[1]);
+ *first=atoi(argv[2]);
+ *last=atoi(argv[3]);
+ if(prepare_sockets(*first,*last)<0){
+    fprintf(stderr,"prepare_sockets()");
+    _exit(deallocate_data());
+ }
+ if(config_epoll()<0){
+    fprintf(stderr,"config_epoll()");
     close_sockets(*first,*last);
-    close(*epoll);
-    //fprintf(stdout,"HOST:%s FIRST:%d LAST:%d",hostname,*first,*last);
-    return deallocate_data();
+    _exit(deallocate_data());
+ }
+ return deallocate_data();
 }
