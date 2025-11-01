@@ -10,8 +10,8 @@ int* last_index;
 int* sockets_needed;
 
 int compute_sockets_number(int first,int last){
-  int rez=(first-last)/MAX_PORTS_PER_SOCKET;
-  if((first-last)%MAX_PORTS_PER_SOCKET)rez++;
+  int rez=(last-first)/MAX_PORTS_PER_SOCKET;
+  if((last-first)%MAX_PORTS_PER_SOCKET)rez++;
   return rez;
 }
 void process_end(sig_atomic_t signum){
@@ -79,7 +79,7 @@ int config_socket(int sock_index,int port){
        fprintf(stderr,"Invalid socket at index %d\n",sock_index);
        return -1;
     }
-    if(port<0 || port>(SOCKETS_NUMBER-1)*MAX_PORTS_PER_SOCKET){
+    if(port<*first || port>*last){
        fprintf(stderr,"Invalid port number requested\n");
        return -1;
     }
@@ -101,9 +101,7 @@ int prepare_sockets(int first,int last){
   if(last>65365)last=*sockets_needed;
 
   for(int i=0;i<*sockets_needed;i++){
-     //if(i>last_index)i=last_index;
      sockets[i]=socket(AF_INET,SOCK_STREAM,0);
-     
      if(sockets[i]<0){
         fprintf(stderr,"socket() number %d| error %d\n",i,errno);
         close_sockets(0,i);
@@ -136,12 +134,22 @@ int config_epoll(){
          fprintf(stderr,"listen sock nr %d error %d",i,errno);
 	 return -1;
      }
-     else fprintf(stdout,"Socket %d currently listenig ports %d - %d\n",i,i*MAX_PORTS_PER_SOCKET,(i+1)*MAX_PORTS_PER_SOCKET-1);
    }
    return 0;
 }
-int scan_specific_host(char* host,int first,int last){
-  return 0;
+int run_epoll(){
+   int n = epoll_wait(*epoll,events,256,-1);
+   if(n<0){
+      fprintf(stderr,"epoll wait() %d\n",errno);
+   }
+   for(int i=0;i<n;i++){
+      
+   }
+   return 0;
+}
+int scan_specific_host(char* host){
+        run_epoll();
+	return 0;
 }
 int main(int argc,char** argv){
  signal(SIGINT,process_end);
@@ -178,5 +186,6 @@ _exit(deallocate_data());
     close_sockets(*first,*last);
     _exit(deallocate_data());
  }
+ scan_specific_host(hostname);
  return deallocate_data();
 }

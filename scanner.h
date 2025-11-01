@@ -8,6 +8,7 @@
 #include<netinet/in.h>
 #include<string.h>
 #include<errno.h>
+#include <sys/param.h>
 #include<arpa/inet.h>
 #define MAX_FD_PER_PROCESS 100
 #define MAX_PORTS_PER_SOCKET 200
@@ -30,6 +31,6 @@ int close_epoll();
 int prepare_sockets(int first,int last);
 int config_socket(int sock_index,int port);
 int close_sockets(int first,int last);
-int scan_specific_host(char* hostname,int first,int last);
+int scan_specific_host(char* hostname);
 int reallocate_data(int newsize);
 int deallocate_data();
