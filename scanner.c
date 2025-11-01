@@ -6,6 +6,7 @@ int* sockets;
 int* epoll;
 struct sockaddr_in* connections_data;
 struct epoll_event* events;
+struct epoll_event* recieve_data;
 int* last_index;
 int* sockets_needed;
 
@@ -14,14 +15,8 @@ int compute_sockets_number(int first,int last){
   if((last-first)%MAX_PORTS_PER_SOCKET)rez++;
   return rez;
 }
-void process_end(sig_atomic_t signum){
-
-   close_sockets(*first,*last);
-   deallocate_data();
-   exit(0);
-}
+void process_end(sig_atomic_t signum){                                                                                                                                                                             close_sockets(*first,*last);                                                                            close_epoll();                                                                                          _exit(deallocate_data());                                                                            }   
 int deallocate_data(){
-  int remaining = 0;
   if(last_index)free(last_index);
   if(epoll)free(epoll);
   if(sockets_needed)free(sockets_needed);
@@ -30,8 +25,9 @@ int deallocate_data(){
   if(last)free(last);
   if(events)free(events);
   if(sockets)free(sockets);
+  if(recieve_data)free(recieve_data);
   if(connections_data)free(connections_data);
-  return -remaining;
+  return (!recieve_data && !last_index && !epoll && !sockets && !hostname && !events && !sockets && !connections_data)-1;
 }
 int reallocate_data(int newsize){
   int* new_sockets = realloc(sockets,newsize*sizeof(int));
@@ -40,6 +36,12 @@ int reallocate_data(int newsize){
      return -1;
   }
   sockets=new_sockets;
+  struct epoll_event* new_recieve_data = realloc(recieve_data,newsize*sizeof(struct epoll_event));
+  if(!new_recieve_data){
+     fprintf(stderr,"realloc new recieve data():error %d",errno);
+     return -1;
+  }
+  recieve_data=new_recieve_data;
   struct sockaddr_in* new_connection_data = realloc(connections_data,newsize*sizeof(struct sockaddr_in));
    if(!new_connection_data){
      fprintf(stderr,"realloc new connections data():error %d",errno);
@@ -128,28 +130,43 @@ int config_epoll(){
      events[i].data.fd=sockets[i];
      if(epoll_ctl(*epoll,EPOLL_CTL_ADD,sockets[i],&events[i])<0){
         fprintf(stderr,"Socket number %d couldn't be added due to error %d",i+1,errno);
-	return -1;
+        return -1;
      }
      if(listen(sockets[i],5)<0){
          fprintf(stderr,"listen sock nr %d error %d",i,errno);
-	 return -1;
+         return -1;
      }
    }
    return 0;
 }
 int run_epoll(){
-   int n = epoll_wait(*epoll,events,256,-1);
-   if(n<0){
+   if(recieve_data==NULL){
+      fprintf(stderr,"Events array null error %d",errno);
+      return -1;
+   }
+   int n = epoll_wait(*epoll,recieve_data,MAX_EPOLL_EVENTS,1000);
+   if(n<=0){
       fprintf(stderr,"epoll wait() %d\n",errno);
    }
-   for(int i=0;i<n;i++){
-      
-   }
+   printf("Dc e n-u %d\n",n);
+   for(int i=0;i<n;i++)
+   {
+      int start,end;
+      start=i*MAX_PORTS_PER_SOCKET;
+      end=MIN((i+1)*MAX_PORTS_PER_SOCKET,*last);
+      for(int j=start;j<=end;j++)
+      {
+          int conn_state = connect(sockets[i],(struct sockaddr*)&sockets[i],10);
+      fprintf(stdout,"port %d,state %d",j,conn_state);    
+      }
+   }   
    return 0;
 }
+
 int scan_specific_host(char* host){
+        fprintf(stdout,"In scan_specific intri macar???");
         run_epoll();
-	return 0;
+        return 0;
 }
 int main(int argc,char** argv){
  signal(SIGINT,process_end);
@@ -168,10 +185,11 @@ int main(int argc,char** argv){
 
  fprintf(stdout,"SOCKETS NEEDED:%d\n",*sockets_needed);
  if(*sockets_needed<=MAX_FD_PER_PROCESS){
-	 if(*sockets_needed<MAX_FD_PER_PROCESS){
-	     if(reallocate_data(*sockets_needed)<0)fprintf(stderr,"realloc()");
-_exit(deallocate_data());
-	 }
+         if(*sockets_needed<MAX_FD_PER_PROCESS){
+		 if(reallocate_data(*sockets_needed)<0){
+	          fprintf(stderr,"realloc()");
+                  _exit(deallocate_data());}
+         }
  }
  else{
     fprintf(stderr,"Fd limit of %d exceeded",MAX_FD_PER_PROCESS);

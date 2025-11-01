@@ -13,6 +13,7 @@
 #define MAX_FD_PER_PROCESS 100
 #define MAX_PORTS_PER_SOCKET 200
 #define MAX_HOSTNAME_LENGTH 50
+#define MAX_EPOLL_EVENTS 100
 #define SOCKETS_NUMBER MAX_FD_PER_PROCESS/MAX_PORTS_PER_SOCKET
 extern int* first;
 extern int* last;
@@ -21,6 +22,7 @@ extern int* sockets;
 extern int* epoll;
 extern struct sockaddr_in* connections_data;
 extern struct epoll_event* events;
+extern struct epoll_event* recieve_data;
 extern int* sockets_needed;
 
 void process_end(sig_atomic_t signum);
