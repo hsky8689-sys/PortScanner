@@ -7,6 +7,13 @@ int* epoll;
 struct sockaddr_in* connections_data;
 struct epoll_event* events;
 int* last_index;
+int* sockets_needed;
+
+int compute_sockets_number(int first,int last){
+  int rez=(first-last)/MAX_PORTS_PER_SOCKET;
+  if((first-last)%MAX_PORTS_PER_SOCKET)rez++;
+  return rez;
+}
 void process_end(sig_atomic_t signum){
 
    close_sockets(*first,*last);
@@ -17,6 +24,7 @@ int deallocate_data(){
   int remaining = 0;
   if(last_index)free(last_index);
   if(epoll)free(epoll);
+  if(sockets_needed)free(sockets_needed);
   if(hostname)free(hostname);
   if(first)free(first);
   if(last)free(last);
@@ -25,13 +33,35 @@ int deallocate_data(){
   if(connections_data)free(connections_data);
   return -remaining;
 }
+int reallocate_data(int newsize){
+  int* new_sockets = realloc(sockets,newsize*sizeof(int));
+  if(!new_sockets){
+     fprintf(stderr,"realloc new sockets():error %d",errno);
+     return -1;
+  }
+  sockets=new_sockets;
+  struct sockaddr_in* new_connection_data = realloc(connections_data,newsize*sizeof(struct sockaddr_in));
+   if(!new_connection_data){
+     fprintf(stderr,"realloc new connections data():error %d",errno);
+     return -1;
+  }
+   connections_data=new_connection_data;
+  struct epoll_event* new_events = realloc(events,newsize*sizeof(struct epoll_event));
+   if(!new_events){
+     fprintf(stderr,"realloc new events():error %d",errno);
+     return -1;
+  }
+   events=new_events;
+  return 0;
+}
 int allocate_data(){
+  sockets_needed=malloc(sizeof(int));
   last_index=malloc(sizeof(int));
   epoll=malloc(sizeof(int));
   first=malloc(sizeof(int));
   last=malloc(sizeof(int));
   hostname=malloc(sizeof(char)*MAX_HOSTNAME_LENGTH);
-  sockets=malloc(sizeof(int)*SOCKETS_NUMBER);
+  sockets=malloc(sizeof(int)*MAX_FD_PER_PROCESS);
   events=malloc(sizeof(struct epoll_event)*MAX_FD_PER_PROCESS);
   connections_data=malloc(sizeof(struct sockaddr_in)*MAX_FD_PER_PROCESS);
   return (epoll && first && last && hostname && connections_data && sockets && events)-1;
@@ -68,11 +98,9 @@ int config_socket(int sock_index,int port){
 }
 int prepare_sockets(int first,int last){
   if(first<0)first=0;
-  if(last>65365)last=65365;
+  if(last>65365)last=*sockets_needed;
 
-  int last_index = (last-first)/MAX_PORTS_PER_SOCKET;
-
-  for(int i=0;i<SOCKETS_NUMBER;i++){
+  for(int i=0;i<*sockets_needed;i++){
      //if(i>last_index)i=last_index;
      sockets[i]=socket(AF_INET,SOCK_STREAM,0);
      
@@ -83,6 +111,7 @@ int prepare_sockets(int first,int last){
      if(config_socket(i,i*MAX_PORTS_PER_SOCKET)<0){
         fprintf(stderr,"config_socket() number %d|error %d\n",i,errno);
      }
+
   }
   return 0;
 }
@@ -96,7 +125,7 @@ int config_epoll(){
       fprintf(stderr,"epoll_create() error: %d\n",errno);
       return -1;
    }
-   for(int i=0;i<SOCKETS_NUMBER;i++){
+   for(int i=0;i<*sockets_needed;i++){
      events[i].events=EPOLLIN;
      events[i].data.fd=sockets[i];
      if(epoll_ctl(*epoll,EPOLL_CTL_ADD,sockets[i],&events[i])<0){
@@ -107,7 +136,7 @@ int config_epoll(){
          fprintf(stderr,"listen sock nr %d error %d",i,errno);
 	 return -1;
      }
-     else fprintf(stdout,"Socket %d currently listenig",i);
+     else fprintf(stdout,"Socket %d currently listenig ports %d - %d\n",i,i*MAX_PORTS_PER_SOCKET,(i+1)*MAX_PORTS_PER_SOCKET-1);
    }
    return 0;
 }
@@ -127,6 +156,19 @@ int main(int argc,char** argv){
  strcpy(hostname,argv[1]);
  *first=atoi(argv[2]);
  *last=atoi(argv[3]);
+ *sockets_needed=compute_sockets_number(*first,*last);
+
+ fprintf(stdout,"SOCKETS NEEDED:%d\n",*sockets_needed);
+ if(*sockets_needed<=MAX_FD_PER_PROCESS){
+	 if(*sockets_needed<MAX_FD_PER_PROCESS){
+	     if(reallocate_data(*sockets_needed)<0)fprintf(stderr,"realloc()");
+_exit(deallocate_data());
+	 }
+ }
+ else{
+    fprintf(stderr,"Fd limit of %d exceeded",MAX_FD_PER_PROCESS);
+    _exit(deallocate_data());
+ }
  if(prepare_sockets(*first,*last)<0){
     fprintf(stderr,"prepare_sockets()");
     _exit(deallocate_data());
