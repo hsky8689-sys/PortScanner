@@ -24,7 +24,10 @@ extern struct sockaddr_in* connections_data;
 extern struct epoll_event* events;
 extern struct epoll_event* recieve_data;
 extern int* sockets_needed;
-
+typedef struct{
+   int first,last;
+}range;
+extern range* ranges;
 void process_end(sig_atomic_t signum);
 int allocate_data();
 int compute_sockets_number(int first,int last);
