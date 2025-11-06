@@ -33,7 +33,7 @@ int allocate_data();
 int compute_sockets_number(int first,int last);
 int config_epoll();
 int close_epoll();
-int prepare_sockets(int first,int last);
+int prepare_sockets();
 int config_socket(int sock_index,int port);
 int close_sockets(int first,int last);
 int scan_specific_host(char* hostname);
