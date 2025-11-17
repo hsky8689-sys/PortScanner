@@ -26,7 +26,6 @@ int scan_tcp_port(int sock_index){
 	  return -1;
 	}
 	socklen_t len = sizeof(connections_data[sock_index]);
-
 	int result = connect(sockets[sock_index],(struct sockaddr*)&connections_data[sock_index],len);
         if(result<0){
 	   if(errno == EAGAIN || errno == EWOULDBLOCK)return -2;
@@ -177,14 +176,31 @@ int config_epoll(){
    }
    return 0;
 }
+int start_connection(int index){
+   if(sockets[index]<0){
+	   sockets[index]=socket(AF_INET,SOCK_STREAM,0);
+           config_socket(index,ranges[index].start);
+   }
+   if(sockets[index]<0)return -1;
+   int c = scan_tcp_port(index);
+   if(c == 0){
+       close(sockets[index]);
+       return 1;
+   }
+   if(c < 0 && errno != EINPROGRESS){
+       close(sockets[index]);
+       return 0;
+   }
+}
 int run_poll(){
    int left_unscanned = *last-*first+1;
    struct pollfd pfd[*sockets_needed];
+   int result[65365];
    for(int i=0;i<*sockets_needed;i++){
      pfd[i].fd=sockets[i];
      pfd[i].events = POLLOUT;
    }
-   while(left_unscanned){
+   /*while(left_unscanned){
          int n = poll(pfd,*sockets_needed,-1);
 	 if(n<0){
 	    perror("n=0");
@@ -192,16 +208,30 @@ int run_poll(){
 	 }
 	 for(int i=0;i<n;i++){
 	    int result = scan_tcp_port(i);
-	    if(result==0){
-	       printf("Port %d deschis\n",ranges[i].first);
-	    }
-	    else printf("Port %d inchis\n",ranges[i].first);
-	    if(ranges[i].first<ranges[i].last){
-	      ranges[i].first++;
+	    if(pfd[i].revents & POLLOUT){
+	       scan_tcp_port(i);
 	    }
 	    left_unscanned--;
 	 }
+   }*/
+   for(int i=0; i<*sockets_needed;i++){
+      int c = start_connection(i);
+      if(c==1){
+        result[ranges[i].first]=1;
+	printf("Port %d deschis instant\n",ranges[i].first++);
+	left_unscanned--;
+      }else if (c==-1){
+         pfd[i].fd=sockets[i];
+	 pfd[i].events=POLLOUT;
+	 pfd[i].revents=0;
+      }
+      while(left_unscanned){
+         int n = poll(pfd,10,100);
+	 long long time = now_ms();
+	 
+      }
    }
+   
    return 0;
 }
 int run_epoll(){
