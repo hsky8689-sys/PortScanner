@@ -8,7 +8,8 @@
 #include<netinet/in.h>
 #include<string.h>
 #include<errno.h>
-#include <sys/param.h>
+#include<poll.h>
+#include<sys/param.h>
 #include<arpa/inet.h>
 #define MAX_FD_PER_PROCESS 100
 #define MAX_PORTS_PER_SOCKET 200
@@ -32,6 +33,7 @@ void process_end(sig_atomic_t signum);
 int allocate_data();
 int compute_sockets_number(int first,int last);
 int config_epoll();
+int run_poll();
 int close_epoll();
 int prepare_sockets();
 int config_socket(int sock_index,int port);

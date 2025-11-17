@@ -13,40 +13,25 @@ range* ranges;
 int result[MAX_FD_PER_PROCESS];
 int scan_tcp_port(int sock_index){
 	if(sockets[sock_index]<0){
-	  fprintf(stderr,"Invalid socket");
+	  fprintf(stderr,"Invalid socket\n");
 	  return -1;
 	}
+	fprintf(stdout,"first:%d last:%d\n",ranges[sock_index].first,ranges[sock_index].last);
 	if(ranges[sock_index].first>=ranges[sock_index].last){
 	  fprintf(stderr,"All ports assigned to %d have been scanned\n",sock_index);
 	  return -1;
 	}
 	if(sock_index<*first||sock_index>*last){
-	  fprintf(stderr,"Invalid socket index");
+	  fprintf(stderr,"Invalid socket index\n");
 	  return -1;
 	}
 	socklen_t len = sizeof(connections_data[sock_index]);
-	if(bind(sockets[sock_index],(struct sockaddr*)&connections_data[sock_index],len)<0){
-	  fprintf(stderr,"Could not bind socket");
-	  return -1;
+
+	int result = connect(sockets[sock_index],(struct sockaddr*)&connections_data[sock_index],len);
+        if(result<0){
+	   if(errno == EAGAIN || errno == EWOULDBLOCK)return -2;
 	}
-	if(listen(sockets[sock_index],1)<0){
-	  fprintf(stderr,"Could not make socket listen");
-	  return -1;
-	}
-	int c = connect(sockets[sock_index],(struct sockaddr*)&connections_data[sock_index],len);
-        switch(c){
-	   case -1:{
-	      fprintf(stderr,"Error %d occured\n",errno);
-              return -1;	      
-            }
-	    case 0:{
-			 return 0;
-	    }
-            default:{
-		    fprintf(stderr,"....\n");
-		    return -2;
-		    }
-	}
+	return result;
 }
 int compute_sockets_number(int first,int last){
   int rez=(last-first)/MAX_PORTS_PER_SOCKET;
@@ -135,6 +120,10 @@ int config_socket(int sock_index,int port){
        fprintf(stderr,"Invalid socket at index %d\n",sock_index);
        return -1;
     }
+    if(sock_index<0 || sock_index>*sockets_needed){
+       fprintf(stderr,"Invalid socket index");
+       return -1;
+    }
     if(port<*first || port>*last){
        fprintf(stderr,"Invalid port number requested\n");
        return -1;
@@ -159,11 +148,11 @@ int prepare_sockets(){
         fprintf(stderr,"socket() number %d| error %d\n",i,errno);
         close_sockets(0,i);
      }
-     if(config_socket(i,i*MAX_PORTS_PER_SOCKET)<0){
+     ranges[i].first=MAX(*first,i*MAX_PORTS_PER_SOCKET);
+     ranges[i].last=MIN((i+1)*MAX_PORTS_PER_SOCKET,*last);
+     if(config_socket(i,ranges[i].first)<0){
         fprintf(stderr,"config_socket() number %d|error %d\n",i,errno);
      }
-     ranges[i].first=i*MAX_PORTS_PER_SOCKET;
-     ranges[i].last=MIN((i+1)*MAX_PORTS_PER_SOCKET,*last);
      fprintf(stdout,"Socket %d scanning ports %d-%d\n",i,ranges[i].first,ranges[i].last);
   }
   return 0;
@@ -181,40 +170,106 @@ int config_epoll(){
    }
    for(int i=0;i<*sockets_needed;i++){
       events[i].data.fd=sockets[i];
-      events[i].events=EPOLLIN;
+      events[i].events=EPOLLOUT;
       if(epoll_ctl(*epoll,EPOLL_CTL_ADD,sockets[i],&events[i])<0){
         fprintf(stderr,"Could not add socket[%d] to epoll\n error %d",i,errno);
       }
    }
    return 0;
 }
+int run_poll(){
+   int left_unscanned = *last-*first+1;
+   struct pollfd pfd[*sockets_needed];
+   for(int i=0;i<*sockets_needed;i++){
+     pfd[i].fd=sockets[i];
+     pfd[i].events = POLLOUT;
+   }
+   while(left_unscanned){
+         int n = poll(pfd,*sockets_needed,-1);
+	 if(n<0){
+	    perror("n=0");
+	    continue;
+	 }
+	 for(int i=0;i<n;i++){
+	    int result = scan_tcp_port(i);
+	    if(result==0){
+	       printf("Port %d deschis\n",ranges[i].first);
+	    }
+	    else printf("Port %d inchis\n",ranges[i].first);
+	    if(ranges[i].first<ranges[i].last){
+	      ranges[i].first++;
+	    }
+	    left_unscanned--;
+	 }
+   }
+   return 0;
+}
 int run_epoll(){
-    int currentfd=events[0].data.fd;
-    int left_unscanned=*last-*first+1;
-     while(left_unscanned){
-       int n = epoll_wait(*epoll,events,*sockets_needed,-1);
-       for(int i=0;i<n;i++)
-	       if(events[i].data.fd==currentfd)
-	       {
-		       printf("Detected event");
-		       printf("Socket %d scanning port %d\n...",i,ranges[i].first);
-		       result[ranges[i].first]=scan_tcp_port(i);
-		       left_unscanned--;
-	       }
-	       else{
-	          currentfd=events[i].data.fd;
-		  if(config_socket(i,ranges[i].first+1)<0){
-		     fprintf(stderr,"Porturile socket-ului %d au fost scanate\n",i);
-		  }
-		  else{
-		     epoll_ctl(*epoll,EPOLL_CTL_ADD,currentfd,&events[i]);
-		  }
-	       }
+  int left_unscanned = *last-*first+1;
+  
+//fprintf(stdout,"Trb sa scanam %d porturi\n",left_unscanned);
+  int current_socket=0;
+  struct epoll_event recieve[150000];
+  int fd,rezultat;
+  while(left_unscanned){
+    
+    int n = epoll_wait(*epoll,recieve,MAX_PORTS_PER_SOCKET,-1);
+    if(n<0){
+       if(errno==EINTR)continue;
+       perror("epoll wait");
+       break;
     }
+    
+    for(int i=0;i<n;i++){
+       int fd = recieve[i].data.fd;
+       uint32_t events = recieve[i].events;
+
+       
+       int index=-1;
+       for(int j=0;j<*sockets_needed;j++)if(sockets[j]==fd){
+	       index=j;
+	       break;
+       }
+
+       if(index==-1)continue;
+       if(sockets[index]<0)continue;
+
+       printf("Scanam pe sockets[%d]\n",current_socket);
+
+       rezultat = scan_tcp_port(index);
+       if(rezultat==-2){
+            epoll_ctl(*epoll,EPOLL_CTL_DEL,fd,NULL);
+	    close(fd);
+	    break;
+	  }
+	  else if(rezultat==-1){
+	     printf("Port %d inchis\n",ranges[index].first);
+	     ranges[index].first++;
+	     left_unscanned--;
+	     break;
+
+	  }
+	  else if(rezultat==0){
+	     printf("Port %d deschis\n",ranges[index].first);
+	     left_unscanned--;
+	     ranges[index].first++;
+	     break;
+	  }
+       
+       struct epoll_event ev;
+       ev.data.fd=rezultat;
+       ev.events=EPOLLOUT;
+       if(epoll_ctl(*epoll,EPOLL_CTL_ADD,rezultat,&ev)<0){
+              fprintf(stderr,"Epoll ctl()\n");
+	      continue;
+       }
+       fprintf(stdout,"Mai avem de scanat %d porturi\n",left_unscanned);      
+    }
+  } 
     return 0;
 }
 int scan_specific_host(char* host){
-        run_epoll();	
+        run_poll();	
         return 0;
 }
 int main(int argc,char** argv){
@@ -231,13 +286,6 @@ int main(int argc,char** argv){
 
  fprintf(stdout,"SOCKETS NEEDED:%d\n",*sockets_needed);
  if(*sockets_needed>MAX_FD_PER_PROCESS){
- /*        if(*sockets_needed<MAX_FD_PER_PROCESS){
-		 if(reallocate_data(*sockets_needed)<0){
-	          fprintf(stderr,"realloc()");
-                  _exit(deallocate_data());}
-         }
- }*/
-
     fprintf(stderr,"Fd limit of %d exceeded",MAX_FD_PER_PROCESS);
     _exit(deallocate_data());
  }
@@ -246,9 +294,9 @@ int main(int argc,char** argv){
     fprintf(stderr,"prepare_sockets()");
     _exit(deallocate_data());
  }
- config_epoll();
+// config_epoll();
  scan_specific_host(hostname);
- close_epoll();
+// close_epoll();
  close_sockets(*first,*last);
  return deallocate_data();
 }
