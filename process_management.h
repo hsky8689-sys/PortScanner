@@ -1,24 +1,9 @@
-#include<stdio.h>
 #include"scanner.h"
-#include<unistd.h>
-
-#define SCAN_TASK 1
-int start_processes(int task){
-    
-}
-void worker(int task){
- switch(task){
-     case SCAN_TASK:
-	     int start,end;
-	     printf("Start=");
-	     if(scanf("%d",&start)<0)break;
-	     printf("End=");
-	     if(scanf("%d",&end)<0)break;
-	     hostname="127.0.0.1";
-
-	     break;
- }
-}
-int main(){
-   return 0;
-}
+#include"sniffer.h"
+#define task_show_connections 1
+#define task_scan 2
+#define task_sniff 3
+#define task_analyze 4
+char display_text[] = "1.Show active connections\n2.Scan specific connection\n-----------------\nCommand";
+extern void worker(int task_id);
+extern void menu();
