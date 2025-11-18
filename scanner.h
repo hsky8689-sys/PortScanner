@@ -6,6 +6,7 @@
 #include<stdlib.h>
 #include<fcntl.h>
 #include<netinet/in.h>
+#include<time.h>
 #include<string.h>
 #include<errno.h>
 #include<poll.h>

@@ -32,6 +32,7 @@ int scan_tcp_port(int sock_index){
 	}
 	return result;
 }
+
 int compute_sockets_number(int first,int last){
   int rez=(last-first)/MAX_PORTS_PER_SOCKET;
   if((last-first)%MAX_PORTS_PER_SOCKET)rez++;
@@ -85,7 +86,7 @@ int reallocate_data(int newsize){
      fprintf(stderr,"realloc new events():error %d",errno);
      return -1;
   }
-   events=new_events;
+  events=new_events;
   return 0;
 }
 int allocate_data(char* begin,char* end){
@@ -179,59 +180,178 @@ int config_epoll(){
 int start_connection(int index){
    if(sockets[index]<0){
 	   sockets[index]=socket(AF_INET,SOCK_STREAM,0);
-           config_socket(index,ranges[index].start);
+           config_socket(index,ranges[index].first);
    }
-   if(sockets[index]<0)return -1;
+   if(sockets[index]<0){
+	   perror("socket still <0");
+	   return -1;
+   }
    int c = scan_tcp_port(index);
    if(c == 0){
        close(sockets[index]);
        return 1;
    }
    if(c < 0 && errno != EINPROGRESS){
-       close(sockets[index]);
+close(sockets[index]);
        return 0;
    }
+   else{
+       close(sockets[index]);
+       return -1;
+   }
+}
+long long get_time(){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (long long)ts.tv_sec * 1000LL + ts.tv_nsec/1000000LL;
 }
 int run_poll(){
    int left_unscanned = *last-*first+1;
    struct pollfd pfd[*sockets_needed];
    int result[65365];
+   int active=0;
+   long long start_time[65365]={0};
+   long long timeout = 100;
+   int maxc = 50;
+   long long current_time;
+
    for(int i=0;i<*sockets_needed;i++){
      pfd[i].fd=sockets[i];
      pfd[i].events = POLLOUT;
    }
-   /*while(left_unscanned){
-         int n = poll(pfd,*sockets_needed,-1);
-	 if(n<0){
-	    perror("n=0");
-	    continue;
-	 }
-	 for(int i=0;i<n;i++){
-	    int result = scan_tcp_port(i);
-	    if(pfd[i].revents & POLLOUT){
-	       scan_tcp_port(i);
-	    }
-	    left_unscanned--;
-	 }
-   }*/
+
    for(int i=0; i<*sockets_needed;i++){
       int c = start_connection(i);
       if(c==1){
         result[ranges[i].first]=1;
 	printf("Port %d deschis instant\n",ranges[i].first++);
 	left_unscanned--;
-      }else if (c==-1){
+      }else if(c==-1){
          pfd[i].fd=sockets[i];
 	 pfd[i].events=POLLOUT;
 	 pfd[i].revents=0;
+	 active++;
       }
-      while(left_unscanned){
-         int n = poll(pfd,10,100);
-	 long long time = now_ms();
+      ranges[i].first++;
+   }
+   while(left_unscanned){
+      int n = poll(pfd,active,timeout);
+      current_time = get_time();
+
+      if(n<0){
+	    if(errno==EINTR)continue;
+	    perror("poll");
+	    break;
+      }
+
+      for(int i=0;i<active;i++){
+	 if(pfd[i].fd<0)continue;
+	 if(pfd[i].revents==0)continue;
+	    
+	 int desc = pfd[i].fd;
+	 int port = ranges[i].first;
+	 int so_err = 0;
+	 socklen_t err_size = sizeof(so_err);
+
+         getsockopt(pfd[i].fd,SOL_SOCKET,SO_ERROR,&so_err,&err_size);
+         
+	 if(so_err==0){
+	    result[ranges[i].first]=1;
+	    fprintf(stdout,"Port %d deschis\n",ranges[i].first);
+	  }
+	  else{
+	     result[ranges[i].first]=0;
+	     perror(strerror(so_err));
+	  }
+ 
+          close(desc);
+          start_time[ranges[i].first]=0;
+	  pfd[i].fd=-1;
+
+	  if(ranges[i].first<ranges[i].last){
+	    ranges[i].first++;
+
+	    int rc = start_connection(i);
+	    if(rc==1){
+               result[ranges[i].first]=1;
+               printf("Port %d deschis instant\n",ranges[i].first++);
+               left_unscanned--;
+            }else if(rc==-1){
+                   pfd[i].fd=sockets[i];
+                   pfd[i].events=POLLOUT;
+                   pfd[i].revents=0;
+                   active++;
+             }else{
+	          pfd[i].fd = -1;
+	     }
+
+	    }
+            else{
+	      if(i<active-1){
+	         pfd[i] = pfd[i-1];
+		 i--;
+	      }
+	      active--;
+	    }
+
+         }
+      }
+   //refill free slots
+   for(int i=0; i<maxc && left_unscanned;i++){
+      if(active>=maxc)break;
+      if(i<active)continue;
+      if(pfd[i].fd!=-1)continue;
+      int rc = start_connection(ranges[i].first);
+      left_unscanned--;
+      if (rc == 1) {
+            result[ranges[i].first] = 1;
+            printf("open: %d (instant)\n", ranges[i].first);
+            continue;
+       } else if (rc == -1) {
+           // pfd[i].fd = slots[i].fd;
+            pfd[i].events = POLLOUT;
+            pfd[i].revents = 0;
+            active++;
+       }else {
+                /* immediate fail */
+        }
+   }
+   //cleanup timed out sockets
+   for(int i=0;i<active;i++){
+      if(pfd[i].fd<0)continue;
+      if(start_time[ranges[i].first]>0 && current_time - start_time[ranges[i].first]){
 	 
+	 close(pfd[i].fd);
+	 start_time[ranges[i].first]=0;
+         
+	 if(ranges[i].first<ranges[i].last){
+            ranges[i].first++;
+            int rc = start_connection(i);
+              if(rc==1){
+                   result[ranges[i].first]=1;
+                   printf("Port %d deschis instant\n",ranges[i].first++);
+                  left_unscanned--;
+              }
+	      else if(rc==-1){
+                   pfd[i].fd=sockets[i];
+                   pfd[i].events=POLLOUT;
+                   pfd[i].revents=0;
+                   active++;
+             }else{
+                  pfd[i].fd = -1;
+             }
+	 }
+         else{
+              if(i<active-1){
+                 pfd[i] = pfd[i-1];
+                 i--;
+              }
+              active--;
+            }
       }
    }
-   
+   for(int i=*first;i<*last;i++)
+      if(result[i])printf("Port %d is opened\n",result[i]);
    return 0;
 }
 int run_epoll(){
