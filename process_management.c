@@ -10,14 +10,15 @@ void worker(int task_id){
 	   char hostname[50];
            char first[50];
 	   char last[65365];
+	   int p_first,p_second;
+	   
 	   fprintf(stdout,"Enter the address:");
 	   scanf("%s",hostname);
 	   fprintf(stdout,"First port:");
 	   scanf("%s",first);
-           
-	   fprintf(stdout,"Last:port");
+           fprintf(stdout,"Last port:");
 	   scanf("%s",last);
-	   
+
 	   processes_needed = MAX((atoi(last)-atoi(first)+1) / MAX_FD_PER_PROCESS,1);
 	   printf("Using %d processes for this scan\n",processes_needed);
 	   for(int i=0;i<processes_needed;i++){
@@ -36,7 +37,7 @@ void worker(int task_id){
 		  sprintf(last_port,"%d",end_index);
 
 		  printf("Process %d handling ports %s-%s\n",i,first_port,last_port);
-		  execlp("./scanner","scanner",hostname,first_port,last_port,"100","10",NULL);
+		  execlp("./tcp_scanner","tcp_scanner",hostname,first_port,last_port,"100","10",NULL);
 	          _exit(0);
 	       }
 	   }

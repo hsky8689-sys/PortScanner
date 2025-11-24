@@ -1,5 +1,8 @@
-#include"scanner.h"
+#include"tcp_scanner.h"
+#include"udp_scanner.h"
 #include"sniffer.h"
+#include"parser.h"
+#define max_processes 800
 #define task_show_connections 1
 #define task_scan 2
 #define task_sniff 3
