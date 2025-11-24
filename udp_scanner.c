@@ -37,6 +37,8 @@ int scan_result(struct scan_info data){
    char message[] = "Hello?..";
    socklen_t addrlen = sizeof(data.addr_info);
 
+   sendto(raw_sock,message,strlen(message),0,(struct sockaddr*)&data.addr_info,addrlen);
+
    struct pollfd pfd[1];
    pfd[0].fd = raw_sock;
    pfd[0].events = POLLIN;
@@ -48,29 +50,44 @@ int scan_result(struct scan_info data){
    }else if(pfd[0].revents & POLLIN){
       char response[1000];
       if(recvfrom(raw_sock,response,sizeof(response),0,NULL,NULL)>0){
-         struct icmphdr* icmph = (struct icmphdr*)(response + sizeof(struct iphdr));
-	 if(icmph->type == ICMP_DEST_UNREACH && icmph->code == ICMP_PORT_UNREACH){
-		 result = 0;
-		 printf("Port %d closed or somehow unreachable",data.port);
-      }
+	 struct icmphdr* icmph = (struct icmphdr*)(response + sizeof(struct iphdr));
+         if (icmph->type == ICMP_DEST_UNREACH && icmph->code == ICMP_PORT_UNREACH) {
+           result = 0;
+           printf("Port %d is Closed (ICMP Port Unreachable).\n", data.port);
+       } 
+           else if (icmph->type == ICMP_DEST_UNREACH && 
+             (icmph->code == ICMP_HOST_UNREACH || // 1: Host unreachable
+             icmph->code == ICMP_PROT_UNREACH || // 2: Protocol unreachable
+             icmph->code == 9 || // Communication Administratively Filtered (Source Quench)
+             icmph->code == 10 || // Communication Administratively Prohibited (Host)
+             icmph->code == 13) // Communication Administratively Prohibited (Port)) 
+		     ){
+    result = 2; // 2 = Filtrat
+    printf("Port %d is Filtered (ICMP Administratively Prohibited / Host Unreachable).\n", data.port);
 }
-      else{
-         result = 1;
-	 printf("Port %d opened or filtered\n",data.port);
+// 3. Alt Răspuns ICMP (Poate fi o eroare de rutare sau TTL expirat)
+else {
+    result = 3; // Tratăm orice ICMP care nu e Port Unreachable ca Filtrat/Eroare
+    printf("Port %d received unexpected ICMP Type %d, Code %d. Treated as Filtered.\n", data.port, icmph->type, icmph->code);
+}  
       }
-
+     else{
+	result=1;
+        printf("opened|filtered");
+     }
    }
-
    close(raw_sock);
    return result;
 }
 void* udp_scan(void* arg){ 
     struct scan_info* data = (struct scan_info*)arg; 
     while(1){
-         pthread_mutex_lock(&mutex);
+         
+	 pthread_mutex_lock(&mutex);
          scanned[current_port]=1;
 	 current_port++;
-         if(scanned[current_port]){//so that we don't scan the same port twice
+         
+	 if(scanned[current_port]){//so that we don't scan the same port twice
 	    pthread_mutex_unlock(&mutex);
 	    continue;
 	 }	 
@@ -81,6 +98,7 @@ void* udp_scan(void* arg){
 	 }
 	 data->port=current_port;
 	 int res = scan_result(*data);
+	 
 	 pthread_mutex_lock(&mutex);
 	 results[current_port]=res;
 	 pthread_mutex_unlock(&mutex);
@@ -141,7 +159,7 @@ int main(int argc,char ** argv)
 
     printf("Opened ports:\n");
     for(int i=first;i<last;i++)
-	    if(results[i])
+	    if(results[i]==1)
 		    printf("%d\n",i);
     free(sockets);
     free(results);
