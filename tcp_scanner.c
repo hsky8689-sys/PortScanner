@@ -1,4 +1,4 @@
-#include"scanner.h"
+#include"tcp_scanner.h"
 struct slot {
     int fd;             // socket fd, -1 if free
     int port;           // port being scanned

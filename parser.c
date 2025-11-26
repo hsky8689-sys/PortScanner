@@ -1,5 +1,6 @@
 #include"parser.h"
-int has_command(char command[]){
+char availible[50][1000] = {"scanner","-host","-tcp","-udp","-timeout","-first","-last","-maxc"};
+int has_command(char command[MAX_CHARACTERS]){
    for(int i=0;i<8;i++){
      if(strcmp(command,availible[i])==0)return 1;
    }
@@ -13,43 +14,36 @@ struct parsed_input* prepare_result(){
    }
    strcpy(result->hostname,"");
    strcpy(result->type_scan,"");
+   result->command_type = DEFAULT_COMMAND;
    result->first=MIN_PORT;
    result->last=MAX_PORT;
    result->timeout=DEFAULT_TIMEOUT;
    result->max_concurrent=DEFAULT_MAX_CONCURRENT;
    return result;
 }
-struct parsed_input* parse(char command[]){
+
+struct parsed_input* parse(char command[MAX_CHARACTERS]){
 	if(strlen(command)==0)return NULL;
 	struct parsed_input *result=prepare_result();
-	char* last_arg = malloc(100*sizeof(char));
-	strcpy(last_arg,"");
-	char* already_used = malloc(100*sizeof(char)); 
-	if(last_arg==NULL||already_used==NULL){
-	   perror("malloc");
-	   free(result);
-	   if(last_arg)free(last_arg);
-	   if(already_used)free(already_used);
-	   return NULL;
-	}
+	if(result==NULL)return NULL;
+	char last_arg[MAX_CHARACTERS];
+	char already_used[MAX_CHARACTERS];
+        
 	for(int i=0;i<strlen(command);i++)
 		command[i]=tolower(command[i]); //case insensitive
 	
 	command[strcspn(command,"\n")] = 0;
+	
 	if(!strstr(command,APP_NAME)){
 	   fprintf(stdout,WRONG_COMMAND_OUTPUT);
-	   free(result);
-	   free(last_arg);
-	   free(already_used);
-	   return NULL;
+	   
+	   goto error;
 	}
 
 	if(strcmp(command,"scanner -h")==0||strcmp(command,"scanner -help")==0){
 	 fprintf(stdout,HELP_OUTPUT);
-	 free(result);
-	 free(already_used);
-	 free(last_arg);
-	 return NULL;
+	 
+	 goto error;//not an error here :)
         }
         else{
 	    char* word = strtok(command," \t");
@@ -59,10 +53,8 @@ struct parsed_input* parse(char command[]){
 
 	   if(strcmp(last_arg,"scanner")!=0){
 	       fprintf(stdout,HELP_OUTPUT);
-	       free(result);
-	       free(already_used);
-	       free(last_arg);
-	       return NULL;
+	       
+	       goto error;
 	   }
            int protocol_specified = 0; 
            while(word!=NULL){
@@ -72,20 +64,20 @@ struct parsed_input* parse(char command[]){
 	            if(strcmp(last_arg,"scanner")!=0){
 		      if(has_command(last_arg)&&!strstr(AVAILIBLE_SCAN_TYPES,last_arg)){
 			 fprintf(stdout,HELP_OUTPUT);
-			 free(result);
-			 free(last_arg);
-			 free(already_used);
-			 return NULL;
+			 
+			 goto error;
 		      }
 		      if(strstr(already_used,word)){
 			 fprintf(stdout,"You may only set an attribute command once\n");
-			 free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			
+			 goto error; 
 		      }
 		      if(strstr(AVAILIBLE_SCAN_TYPES,word)){
 			 fprintf(stdout,"Word %s is a scan protocol\n",word);
 			 if(protocol_specified){
                            fprintf(stdout,"A single scan uses ONE of the availible protocols %s\n",AVAILIBLE_SCAN_TYPES);
-                           free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+                    
+			   goto error;
                          }
 			 else{ 
 				 protocol_specified=1;
@@ -100,7 +92,7 @@ struct parsed_input* parse(char command[]){
                          fprintf(stdout,"Word %s is a scan protocol\n",word);
                          if(protocol_specified){
                            fprintf(stdout,"A single scan uses ONE of the availible protocols %s\n",AVAILIBLE_SCAN_TYPES);
-                            free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			    goto error; 
                          }else{
 			    protocol_specified = 1;
 			    fprintf(stdout,"Scan protocol is set to %s\n",word);
@@ -112,13 +104,18 @@ struct parsed_input* parse(char command[]){
 		else
 	        {
 			if(strcmp(last_arg,"-host")==0){
+			   if(strlen(result->hostname)>0){
+			       fprintf(stdout,"Can only scan one host\n");
+			       goto error;
+			   }
 			   strcpy(result->hostname,word);
 			}
 			else if(strcmp(last_arg,"-first")==0){
 			   int first = atoi(word);
 			   if(first<MIN_PORT||first>MAX_PORT||first>result->last){
 			      fprintf(stdout,"1 <= FIRST PORT <= LAST PORT <= 65535\n");
-			      free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			      
+			      goto error;
 			   }
 			   result->first=first;
 			}
@@ -126,7 +123,8 @@ struct parsed_input* parse(char command[]){
 			   int last = atoi(word);
 			   if(last<MIN_PORT||last>MAX_PORT||last<result->first){
                               fprintf(stdout,"1 <= FIRST PORT <= LAST PORT <= 65535\n");
-                              free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+                               
+			      goto error;
                            }
 			   result->last=last;
 			}
@@ -134,22 +132,26 @@ struct parsed_input* parse(char command[]){
 			    int timeout = atoi(word);
 			    if(timeout<0){
 			       fprintf(stdout,"TIMEOUT > 0\n");
-			       free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			       
+			       goto error; 
 			    }
 			    result->timeout=timeout;
 			}
 			else if(strcmp(last_arg,"-maxc")==0){
 			    int maxc = atoi(word);
 			    if(maxc<0){
-			      fprintf(stdout,"NR OF CONCURRENT SOCKETS > 0");
-			      free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			      fprintf(stdout,"NR OF CONCURRENT SOCKETS > 0"); 
+			    
+			    
+			     goto error;
 			    }
 			    result->max_concurrent=maxc;
 			}
 			else{
 			  if(has_command(last_arg)==has_command(last_arg)){
 			     fprintf(stdout,HELP_OUTPUT);
-			     free(result);                                                                                           free(last_arg);                                                                                         free(already_used);                                                                                     return NULL; 
+			      
+			     goto error;
 			  }
 			}
 
@@ -160,21 +162,14 @@ struct parsed_input* parse(char command[]){
         }
 	if(strcmp(result->hostname,"")==0){
 	   fprintf(stdout,"You need to specify a hostname to scan\n");
-	   if(result)free(result);
 	}
 	if(strcmp(result->type_scan,"")==0){
 	   fprintf(stdout,"You need to specify a scan protocol from the availible %s\n",AVAILIBLE_SCAN_TYPES);
-	   if(result)free(result);
 	}
-	if(result)free(result);
-	if(last_arg)free(last_arg);
-	if(already_used)free(already_used);
+goto ok;	
+error:
+        result=NULL;
+        free(result);
+ok:
 	return result;
-}
-int main(){
-    char command[MAX_CHARACTERS];
-    //while(1){
-            fgets(command,sizeof(command),stdin);
-	    parse(command);
-        // }
 }

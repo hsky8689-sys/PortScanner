@@ -10,6 +10,8 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/wait.h>
 #include <signal.h>
