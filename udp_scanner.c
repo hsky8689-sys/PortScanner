@@ -11,6 +11,13 @@ struct scan_info{
    struct addrinfo addr_info;
 };
 int current_port,first,last;
+
+static long long now_ms(void){
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (long long)t.tv_sec*1000 + t.tv_nsec/1000000;
+}
+
 int scan_result(struct scan_info data){
    int result = -1;
    if(sockets[data.index]<0){
@@ -69,8 +76,8 @@ else {
 }
 void* udp_scan(void* arg){ 
     struct scan_info* data = (struct scan_info*)arg; 
-    while(1){
-         
+    long long start_time = now_ms();
+    while(now_ms()-start_time <= data->timeout_ms){
 	 pthread_mutex_lock(&mutex);
          scanned[current_port]=1;
 	 current_port++;
@@ -99,6 +106,10 @@ int main(int argc,char ** argv)
      if (argc < 4) {
         fprintf(stderr, "Usage: %s <host> <first_port> <last_port> [max_concurrent] [timeout_ms]\n", argv[0]);
         return 1;
+    }
+    if(geteuid()!=0){
+	    fprintf(stdout,"UDP SCAN REQUIRES ROOT PRIVILEGES\n");
+	    exit(EXIT_FAILURE);
     }
     const char *host = argv[1];
     first = atoi(argv[2]);
