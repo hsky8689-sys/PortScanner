@@ -4,13 +4,16 @@ int* results;
 int* scanned;
 pthread_t threads[1024];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+/*
 struct scan_info{
    int index;
    int port;
    int timeout_ms;
    struct addrinfo addr_info;
 };
+*/
 int current_port,first,last;
+char* scan_type;
 
 static long long now_ms(void){
     struct timespec t;
@@ -24,18 +27,18 @@ int scan_result(struct scan_info data){
       fprintf(stderr,"Socket no %d got somehow shut down\n",data.index);
       sockets[data.index] = socket(data.addr_info.ai_family,SOCK_DGRAM,0);
    }
-   int raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_ICMP);
-   if(raw_sock < 0){
+   //int raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_ICMP);
+   if(sockets[data.index] < 0){
       perror("raw socket wasnt created");
       return -2;
    }
    char message[] = "Hello?..";
    socklen_t addrlen = sizeof(data.addr_info);
 
-   sendto(raw_sock,message,strlen(message),0,(struct sockaddr*)&data.addr_info,addrlen);
+   sendto(sockets[data.index],message,strlen(message),0,(struct sockaddr*)&data.addr_info,addrlen);
 
    struct pollfd pfd[1];
-   pfd[0].fd = raw_sock;
+   pfd[0].fd = sockets[data.index];
    pfd[0].events = POLLIN;
 
    int ans = poll(pfd,1,data.timeout_ms);
@@ -44,7 +47,7 @@ int scan_result(struct scan_info data){
    
    }else if(pfd[0].revents & POLLIN){
       char response[1000];
-      if(recvfrom(raw_sock,response,sizeof(response),0,NULL,NULL)>0){
+      if(recvfrom(sockets[data.index],response,sizeof(response),0,NULL,NULL)>0){
 	 struct icmphdr* icmph = (struct icmphdr*)(response + sizeof(struct iphdr));
          if (icmph->type == ICMP_DEST_UNREACH && icmph->code == ICMP_PORT_UNREACH) {
            result = 0;
@@ -68,10 +71,10 @@ else {
       }
      else{
 	result=1;
-        printf("opened|filtered");
+        printf("Port %d opened|filtered\n",data.port);
      }
    }
-   close(raw_sock);
+   close(sockets[data.index]);
    return result;
 }
 void* udp_scan(void* arg){ 
@@ -79,16 +82,16 @@ void* udp_scan(void* arg){
     long long start_time = now_ms();
     while(now_ms()-start_time <= data->timeout_ms){
 	 pthread_mutex_lock(&mutex);
-         scanned[current_port]=1;
+         scanned[current_port]++;
 	 current_port++;
          
-	 if(scanned[current_port]){//so that we don't scan the same port twice
+	 if(scanned[current_port] > MAX_SCANS_PER_PORT || results[current_port]==1){//so that we don't scan the same port too many times
 	    pthread_mutex_unlock(&mutex);
 	    continue;
 	 }	 
 	 pthread_mutex_unlock(&mutex);
          
-         if(current_port>=last){
+         if(current_port >= last){
 	    break;
 	 }
 	 data->port=current_port;
@@ -103,8 +106,8 @@ void* udp_scan(void* arg){
 }
 int main(int argc,char ** argv)
 {
-     if (argc < 4) {
-        fprintf(stderr, "Usage: %s <host> <first_port> <last_port> [max_concurrent] [timeout_ms]\n", argv[0]);
+     if (argc < 5) {
+        fprintf(stderr, "Usage: %s <host> <first_port> <last_port> [max_concurrent] [timeout_ms] [scan type]\n", argv[0]);
         return 1;
     }
     if(geteuid()!=0){
@@ -116,6 +119,13 @@ int main(int argc,char ** argv)
     last  = atoi(argv[3]);
     int maxc  = (argc >= 5) ? atoi(argv[4]) : 128;
     int timeout_ms = (argc >= 6) ? atoi(argv[5]) : 500;
+    scan_type = calloc(10,sizeof(char));
+    if(scan_type==NULL){
+        perror("calloc scan_type");
+	return -1;
+    }
+    strcpy(scan_type,argv[4]);
+
     if (first < 1 || last < first || maxc <= 0) { fprintf(stderr,"bad args\n"); return 1; }
     
     sockets = calloc(maxc,sizeof(int));
@@ -133,7 +143,7 @@ int main(int argc,char ** argv)
     current_port = first;
 
     for(int i=0;i<maxc;i++){ 
-        sockets[i] = socket(AF_INET,SOCK_DGRAM,0);
+        sockets[i] = socket(AF_INET,SOCK_RAW,IPPROTO_ICMP);
 	if(sockets[i]<0){
 	   perror("socket");
 	   break;
@@ -163,5 +173,6 @@ int main(int argc,char ** argv)
     free(sockets);
     free(results);
     free(scanned);
+    free(scan_type);
     return 0;
 }

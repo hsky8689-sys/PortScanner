@@ -15,12 +15,12 @@
 #define task_exit 6
 #define DEFAULT_COMMAND task_scan
 #define MIN_PORT 1
-#define MAX_PORT 65535
+#define MAX_PORT 65565
 #define MAX_CHARACTERS 50000
-#define DEFAULT_TIMEOUT 1000
-#define DEFAULT_MAX_CONCURRENT 100
+#define DEFAULT_TIMEOUT 10000
+#define DEFAULT_MAX_CONCURRENT 1000
 #define APP_NAME "scanner"
-#define AVAILIBLE_SCAN_TYPES "-tcp -udp"
+#define AVAILIBLE_SCAN_TYPES "-tcp -udp -syn -xmas -null -fyn"
 #define WRONG_COMMAND_OUTPUT "Incorrect syntax type scanner -h or scanner --help for more\n"
 #define WRONG_PORT_ERROR "1 <= FIRST PORT <= LAST PORT <= 65545\n"
 
