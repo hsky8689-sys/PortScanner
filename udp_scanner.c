@@ -4,14 +4,6 @@ int* results;
 int* scanned;
 pthread_t threads[1024];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-/*
-struct scan_info{
-   int index;
-   int port;
-   int timeout_ms;
-   struct addrinfo addr_info;
-};
-*/
 int current_port,first,last;
 char* scan_type;
 
@@ -106,8 +98,8 @@ void* udp_scan(void* arg){
 }
 int main(int argc,char ** argv)
 {
-     if (argc < 5) {
-        fprintf(stderr, "Usage: %s <host> <first_port> <last_port> [max_concurrent] [timeout_ms] [scan type]\n", argv[0]);
+     if (argc < 4) {
+        fprintf(stderr, "Usage: %s <host> <first_port> <last_port> [max_concurrent] [timeout_ms]\n", argv[0]);
         return 1;
     }
     if(geteuid()!=0){
@@ -119,12 +111,6 @@ int main(int argc,char ** argv)
     last  = atoi(argv[3]);
     int maxc  = (argc >= 5) ? atoi(argv[4]) : 128;
     int timeout_ms = (argc >= 6) ? atoi(argv[5]) : 500;
-    scan_type = calloc(10,sizeof(char));
-    if(scan_type==NULL){
-        perror("calloc scan_type");
-	return -1;
-    }
-    strcpy(scan_type,argv[4]);
 
     if (first < 1 || last < first || maxc <= 0) { fprintf(stderr,"bad args\n"); return 1; }
     
@@ -132,11 +118,11 @@ int main(int argc,char ** argv)
     if(sockets==NULL){
        perror("calloc sockets");
     }
-    results = calloc(60000,sizeof(int));
+    results = calloc(65365,sizeof(int));
     if(results==NULL){                     /*arimtetica...*/
        perror("calloc results");
     }
-    scanned = calloc(60000,sizeof(int));
+    scanned = calloc(65365,sizeof(int));
     if(scanned==NULL){
        perror("calloc scanned");
     }
@@ -152,7 +138,7 @@ int main(int argc,char ** argv)
 	struct scan_info* info = malloc(sizeof(struct scan_info));
 
         if(info==NULL){perror("malloc scan_info");continue;}
-
+        
 	info->port = current_port;
 	info->timeout_ms = timeout_ms;
 	info->index = i;
@@ -173,6 +159,5 @@ int main(int argc,char ** argv)
     free(sockets);
     free(results);
     free(scanned);
-    free(scan_type);
     return 0;
 }
