@@ -48,11 +48,12 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
     tcp->rst = 0;
     if(strcmp(scan_type,"syn") == 0)
 	    tcp->syn = 1;
-    else if(strcmp(scan_type,"syn") == 0)
+    else if(strcmp(scan_type,"fin") == 0)
 	    tcp->fin=1;
     else if(strcmp(scan_type,"xmas") == 0)
 	    tcp->fin=1,tcp->psh=1,tcp->urg=1;
     else if(strcmp(scan_type,"null") == 0);//all the flags are properly set
+    //Specifying non existent scan types result in a null scan =))
 }
 int raw_scan(char* target_ip,int port,char* scan_type){
 	char datagram[4096];
@@ -66,7 +67,7 @@ int raw_scan(char* target_ip,int port,char* scan_type){
 	iph->tos = 0;
 	iph->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 	iph->id = htons(54321);
-	iph->ttl = 255;
+	iph->ttl = 255;lip
 	iph->protocol = IPPROTO_TCP;
         
 	char* src_ip = get_machine_ip();
@@ -88,6 +89,21 @@ int raw_scan(char* target_ip,int port,char* scan_type){
 	tcph->window = htons(5840);
 	tcph->check = 0;
 	
+	struct pseudo_header psh;
+	psh.source_address = iph->saddr;
+	psh.dest_address = iph->daddr;
+	psh.placeholder = IPPROTO_TCP;
+	psh.tcp_length = htons(sizeof(struct tcphdr));
+
+	int psize = sizeof(struct pseudo_header) + sizeof(struct tcphdr);
+	char* pseudogram = malloc(psize);
+	if(pseudogram==NULL){
+		perror("malloc");
+	        return -EXIT_FAILURE;
+	}
+	memcpy(pseudogram,(char*)&psh,sizeof(struct pseudo_header));
+	memcpy(pseudogram + sizeof(struct pseudo_header),tcph,sizeof(struct tcphdr));
+	tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
 }
 int main(){
    get_machine_ip();

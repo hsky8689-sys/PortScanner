@@ -152,10 +152,9 @@ int main(int argc,char ** argv)
 	pthread_join(threads[i],NULL);
     }
 
-    printf("Opened ports:\n");
-    for(int i=first;i<last;i++)
-	    if(results[i]==1)
-		    printf("%d\n",i);
+    //printf("Opened ports:\n");
+    for(int i=first;i<=last;i++)
+	 fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
     free(sockets);
     free(results);
     free(scanned);
