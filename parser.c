@@ -168,8 +168,10 @@ struct parsed_input* parse(char command[MAX_CHARACTERS]){
 	}
 goto ok;	
 error:
-        result=NULL;
-        free(result);
+
 ok:
 	return result;
+}
+int main(){
+  return 0;
 }
