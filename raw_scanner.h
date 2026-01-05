@@ -24,7 +24,6 @@
 #define MAX_PORTS_PER_SOCKET 200
 #define MAX_HOSTNAME_LENGTH 50
 #define MAX_EPOLL_EVENTS 100
-int* sockets;
 int* results;
 int* scanned;
 pthread_t threads[MAX_FD_PER_PROCESS];

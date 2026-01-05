@@ -1,21 +1,27 @@
 #include "scan_delegate.h"
-char* get_machine_ip(){
-   char hostname[256];
-   struct hostent *host_info;
-   struct in_addr *addr;
-
-   gethostname(hostname,sizeof(hostname));
-   host_info = gethostbyname(hostname);
-   
-   if(host_info != NULL){
-      addr = (struct in_addr*)host_info->h_addr_list[0];
-      printf("Hostname: %s\n", hostname);
-      char* res = inet_ntoa(*addr);
-      printf("Local IP Address: %s\n", res);
-      return res;
+void get_machine_ip(char* buffer){
+   int sock = socket(AF_INET,SOCK_DGRAM,0);
+   if(sock < 0){
+      perror("socket");
+      return;
    }
-   perror("Could not receive local IP adress");
-   return NULL;
+   struct sockaddr_in serv;
+   serv.sin_family = AF_INET;
+   serv.sin_addr.s_addr = inet_addr("8.8.8.8");
+   serv.sin_port = htons(53);
+
+   if(connect(sock,(const struct sockaddr*)&serv,sizeof(serv))<0){
+      perror("connect");
+      close(sock);
+      return;
+   }
+
+   struct sockaddr_in name;
+   socklen_t namelen = sizeof(name);
+   if(getsockname(sock,(struct sockaddr*)&name,&namelen)<0)
+	   perror("getsockname error");
+   else strcpy(buffer,inet_ntoa(name.sin_addr));
+   close(sock);
 }
 unsigned short calculate_checksum(unsigned short *ptr,int nbytes){
    long sum;
@@ -56,6 +62,12 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
     //Specifying non existent scan types result in a null scan =))
 }
 int raw_scan(int sock,struct scan_info *info){
+
+	if(sock<0){
+	   perror("Somehow socket got closed before scan.Reopening...");
+	   sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
+	}
+	
 	char datagram[4096];
 	memset(datagram,0,4096);
 
@@ -70,7 +82,9 @@ int raw_scan(int sock,struct scan_info *info){
 	iph->ttl = 255;
 	iph->protocol = IPPROTO_TCP;
         
-	char* src_ip = get_machine_ip();
+	char src_ip[10000];
+	get_machine_ip(src_ip);
+	
 	if(src_ip == NULL){
 	   return -1;
 	}
@@ -118,6 +132,8 @@ int raw_scan(int sock,struct scan_info *info){
         return result;
 }
 int main(){
-   get_machine_ip();
+   char buffer[10000];
+   get_machine_ip(buffer);
+   printf("%s",buffer);
    return 0;
 }

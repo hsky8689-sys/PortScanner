@@ -26,7 +26,7 @@ struct scan_info{
    int timeout_ms;
    struct addrinfo addr_info;
 };
-char* get_machine_ip();
+void get_machine_ip(char* buffer);
 unsigned short calculate_checksum(unsigned short *ptr,int nbytes);
 void set_tcp_flags(struct tcphdr *tcp,const char *scan_type);
 int raw_scan(int sock,struct scan_info *info);
