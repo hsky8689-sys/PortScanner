@@ -28,6 +28,6 @@ int* results;
 int* scanned;
 pthread_t threads[MAX_FD_PER_PROCESS];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-pthread_t listener;
+pthread_t listener_thread;
 int current_port,first,last,maxc,timeout_ms;
-int raw_sock;
+
