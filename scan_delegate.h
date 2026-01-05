@@ -29,4 +29,4 @@ struct scan_info{
 char* get_machine_ip();
 unsigned short calculate_checksum(unsigned short *ptr,int nbytes);
 void set_tcp_flags(struct tcphdr *tcp,const char *scan_type);
-int raw_scan(char* target_ip,int port,char* scan_type);
+int raw_scan(int sock,struct scan_info *info);

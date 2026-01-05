@@ -1,6 +1,9 @@
 #include "raw_scanner.h"
+int scan_result(struct scan_info data){
+	int result = -1;
+}
 void* scan(void* arg){
-     
+        
 }
 int main(int argc,char** argv)
 {

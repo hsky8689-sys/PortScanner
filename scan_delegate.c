@@ -55,7 +55,7 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
     else if(strcmp(scan_type,"null") == 0);//all the flags are properly set
     //Specifying non existent scan types result in a null scan =))
 }
-int raw_scan(char* target_ip,int port,char* scan_type){
+int raw_scan(int sock,struct scan_info *info){
 	char datagram[4096];
 	memset(datagram,0,4096);
 
@@ -67,7 +67,7 @@ int raw_scan(char* target_ip,int port,char* scan_type){
 	iph->tos = 0;
 	iph->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr);
 	iph->id = htons(54321);
-	iph->ttl = 255;lip
+	iph->ttl = 255;
 	iph->protocol = IPPROTO_TCP;
         
 	char* src_ip = get_machine_ip();
@@ -76,15 +76,15 @@ int raw_scan(char* target_ip,int port,char* scan_type){
 	}
 
 	iph->saddr = inet_addr(src_ip);
-	iph->daddr = inet_addr(target_ip);
+	iph->daddr = inet_addr(info->target_ip);
 
 	tcph->source = htons(12345);///pana acum
-	tcph->dest = htons(port);
+	tcph->dest = htons(info->port);
 	tcph->seq = 0;
 	tcph->ack_seq = 0;
 	tcph->doff = 5;
 
-	set_tcp_flags(tcph,scan_type);
+	set_tcp_flags(tcph,info->scan_type);
 
 	tcph->window = htons(5840);
 	tcph->check = 0;
@@ -104,6 +104,18 @@ int raw_scan(char* target_ip,int port,char* scan_type){
 	memcpy(pseudogram,(char*)&psh,sizeof(struct pseudo_header));
 	memcpy(pseudogram + sizeof(struct pseudo_header),tcph,sizeof(struct tcphdr));
 	tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
+	//!!!
+	int one = 1;
+        setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+
+        struct sockaddr_in dest;
+        dest.sin_family = AF_INET;
+        dest.sin_addr.s_addr = iph->daddr;
+
+        int result = sendto(sock, datagram, iph->tot_len, 0, (struct sockaddr *)&dest, sizeof(dest));
+    
+        free(pseudogram);
+        return result;
 }
 int main(){
    get_machine_ip();
