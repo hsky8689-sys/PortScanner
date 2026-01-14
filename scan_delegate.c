@@ -1,4 +1,21 @@
 #include "scan_delegate.h"
+char machine_ip[16];
+int resolve_hostname(const char* hostname,char *ip_buffer){
+   struct addrinfo hints,*res;
+   struct sockaddr_in *addr;
+   
+   memset(&hints,0,sizeof(hints));
+   hints.ai_family = AF_INET;
+   hints.ai_socktype = SOCK_STREAM;
+
+   if(getaddrinfo(hostname,NULL,&hints,&res)!=0)return -1;
+
+   addr = (struct sockaddr_in *)res->ai_addr;
+   strcpy(ip_buffer,inet_ntoa(addr->sin_addr));
+
+   freeaddrinfo(res);
+   return 0;
+}
 void get_machine_ip(char* buffer){
    int sock = socket(AF_INET,SOCK_DGRAM,0);
    if(sock < 0){
@@ -82,14 +99,15 @@ int raw_scan(int sock,struct scan_info *info){
 	iph->ttl = 255;
 	iph->protocol = IPPROTO_TCP;
         
-	char src_ip[10000];
-	get_machine_ip(src_ip);
+	if(!machine_ip[0])
+	    get_machine_ip(machine_ip);
 	
-	if(src_ip == NULL){
-	   return -1;
+	if(!machine_ip[0]){
+	    perror("Could not retrieve machine IP\n");
+	    return -1;
 	}
 
-	iph->saddr = inet_addr(src_ip);
+	iph->saddr = inet_addr(machine_ip);
 	iph->daddr = inet_addr(info->target_ip);
 
 	tcph->source = htons(12345);///pana acum
@@ -110,11 +128,7 @@ int raw_scan(int sock,struct scan_info *info){
 	psh.tcp_length = htons(sizeof(struct tcphdr));
 
 	int psize = sizeof(struct pseudo_header) + sizeof(struct tcphdr);
-	char* pseudogram = malloc(psize);
-	if(pseudogram==NULL){
-		perror("malloc");
-	        return -EXIT_FAILURE;
-	}
+	char pseudogram[psize+1];
 	memcpy(pseudogram,(char*)&psh,sizeof(struct pseudo_header));
 	memcpy(pseudogram + sizeof(struct pseudo_header),tcph,sizeof(struct tcphdr));
 	tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
@@ -126,8 +140,5 @@ int raw_scan(int sock,struct scan_info *info){
         dest.sin_family = AF_INET;
         dest.sin_addr.s_addr = iph->daddr;
 
-        int result = sendto(sock, datagram, iph->tot_len, 0, (struct sockaddr *)&dest, sizeof(dest));
-    
-        free(pseudogram);
-        return result;
+        return sendto(sock, datagram, iph->tot_len, 0, (struct sockaddr *)&dest, sizeof(dest));
 }

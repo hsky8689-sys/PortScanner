@@ -1,6 +1,7 @@
 #include "raw_scanner.h"
 int raw_sock;
 int listen_responses;
+
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
@@ -10,7 +11,7 @@ void* listener(void* arg){
    while(current_port<=last){
     int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
     if(size<0)continue;
-
+    fprintf(stdout,"Received %d bytes of data\n",size);
     struct iphdr* iph = (struct iphdr*) buffer;
 
     struct tcphdr* tcph = (struct tcphdr*)(buffer + (iph->ihl*4));
@@ -24,29 +25,27 @@ void* listener(void* arg){
 }
 void* worker(void* arg){
     struct scan_info* info = (struct scan_info*)arg;
-    char* my_ip = malloc(40*sizeof(char));
-    if(my_ip==NULL){
-        perror("malloc my_ip");
-	goto skip;
-    }
-    get_machine_ip(my_ip);
 
     while(1){
+	    info->port = current_port;
+	    if(scanned[current_port]){
+	        continue;
+	    }
 	    pthread_mutex_lock(&mutex);
 	    if(current_port > last){
                 pthread_mutex_unlock(&mutex);
                 break;
             }
-	    fprintf(stdout,"Currently scanning port %d\n",current_port);
+	    //int result = raw_scan(raw_sock,info);
+	    if(raw_scan(raw_sock,info)>0)
+		 scanned[current_port] = 1;
 	    current_port++;
 	    pthread_mutex_unlock(&mutex);
-	    
 
 	    usleep(100);
     }
 skip:
     free(info);
-    free(my_ip);
     return NULL;
 }
 int main(int argc,char** argv)
@@ -60,13 +59,27 @@ int main(int argc,char** argv)
            exit(EXIT_FAILURE);
         }
 	const char* host = argv[1];
+	char target_ip[16];
+	char my_ip[20];
+        get_machine_ip(my_ip);
+	
+	if(inet_addr(host) == INADDR_NONE){
+		if(resolve_hostname(host,target_ip)!=0){
+		    fprintf(stderr,"Could not resolve hostname");
+		    return -1;
+		}
+		printf("Found IP: %s\n",target_ip);
+	}
+	else strcpy(target_ip,host);
+          
 	first = atoi(argv[2]);
 	last = atoi(argv[3]);
 	const char* scan_type = argv[4];
 	maxc = (argc >= 6) ? atoi(argv[5]) : DEFAULT_MAX_CONCURRENT;
 	timeout_ms = (argc >= 7) ? atoi(argv[6]) : DEFAULT_TIMEOUT;
 	current_port=first;
-	
+	listen_responses = 1;
+
         results = calloc(65536,sizeof(int));
         if(results==NULL){                     
            perror("calloc results");
@@ -104,7 +117,7 @@ int main(int argc,char** argv)
 	       continue;
             }
             info->index=i;
-            strcpy(info->target_ip,host);
+            strcpy(info->target_ip,target_ip);
             strcpy(info->scan_type,scan_type);
             info->timeout_ms=timeout_ms;
             
@@ -122,11 +135,13 @@ int main(int argc,char** argv)
 	for(int i=0;i<maxc;i++){
 	     pthread_join(threads[i],NULL);
 	}
+	listen_responses = 0;
 	
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	   fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
+	  if(results[i]>-1)
+	    fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
 	close(raw_sock);
 	free(scanned);
