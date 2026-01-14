@@ -1,0 +1,67 @@
+[4mMAX[24m(3)                                 Library Functions Manual                                [4mMAX[24m(3)
+
+[1mNAME[0m
+       MAX, MIN - maximum or minimum of two values
+
+[1mLIBRARY[0m
+       Standard C library ([4mlibc[24m, [4m-lc[24m)
+
+[1mSYNOPSIS[0m
+       [1m#include <sys/param.h>[0m
+
+       [1mMAX([4m[22ma[24m[1m, [4m[22mb[24m[1m);[0m
+       [1mMIN([4m[22ma[24m[1m, [4m[22mb[24m[1m);[0m
+
+[1mDESCRIPTION[0m
+       These macros return the maximum or minimum of [4ma[24m and [4mb[24m.
+
+[1mRETURN VALUE[0m
+       These  macros  return  the  value of one of their arguments, possibly converted to a different
+       type (see BUGS).
+
+[1mERRORS[0m
+       These macros may raise the "invalid" floating-point exception when any  of  the  arguments  is
+       NaN.
+
+[1mSTANDARDS[0m
+       GNU, BSD.
+
+[1mNOTES[0m
+       If  either  of  the  arguments is of a floating-point type, you might prefer to use [1mfmax[22m(3) or
+       [1mfmin[22m(3), which can handle NaN.
+
+       The arguments may be evaluated more than once, or not at all.
+
+       Some UNIX systems might provide these macros in a different header, or not at all.
+
+[1mBUGS[0m
+       Due to the usual arithmetic conversions, the result of these macros may be very different from
+       either of the arguments.  To avoid this, ensure that both arguments have the same type.
+
+[1mEXAMPLES[0m
+       #include <stdio.h>
+       #include <stdlib.h>
+       #include <sys/param.h>
+
+       int
+       main(int argc, char *argv[])
+       {
+           int a, b, x;
+
+           if (argc != 3) {
+               fprintf(stderr, "Usage: %s <num> <num>\n", argv[0]);
+               exit(EXIT_FAILURE);
+           }
+
+           a = atoi(argv[1]);
+           b = atoi(argv[2]);
+           x = MAX(a, b);
+           printf("MAX(%d, %d) is %d\n", a, b, x);
+
+           exit(EXIT_SUCCESS);
+       }
+
+[1mSEE ALSO[0m
+       [1mfmax[22m(3), [1mfmin[22m(3)
+
+Linux man-pages 6.7                           2023-10-31                                       [4mMAX[24m(3)

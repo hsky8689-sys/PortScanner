@@ -1,11 +1,13 @@
 #include "raw_scanner.h"
+#include "scan_delegate.h"
 int raw_sock;
+int listen_responses = 1;
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
    socklen_t saddr_len = sizeof(saddr);
 
-   while(1){
+   while(listen_responses){
     int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
     if(size<0)continue;
 
@@ -21,8 +23,19 @@ void* listener(void* arg){
 }
 void* worker(void* arg){
     struct scan_info* info = (struct scan_info*)arg;
-     
+    char my_ip[16];
+    get_machine_ip(my_ip);
+    while(1){
+	    pthread_mutex_lock(&mutex);
+	    if(current_port > last){
+	        pthread_mutex_unlock(&mutex);
+		break;
+	    }
+	    pthread_mutex_unlock(&mutex);
+	    usleep(1000);
+    }
     free(info);
+    return NULL;
 }
 int main(int argc,char** argv)
 {
@@ -54,8 +67,8 @@ int main(int argc,char** argv)
 	   exit(EXIT_FAILURE);
         }
 	//one raw socket needed
-	raw_scan = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
-	if(raw_scan < 0){
+	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
+	if(raw_sock < 0){
 	   perror("pthread_create raw socket");
 	   free(results);
 	   free(scanned);
@@ -84,13 +97,13 @@ int main(int argc,char** argv)
 	for(int i=0;i<maxc;i++){
 	     pthread_join(threads[i],NULL);
 	}
-	
+	listen_responses = 0;
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
 	   fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
-	close(raw_scan);
+	close(raw_sock);
 	free(scanned);
 	free(results);
 	return 0;

@@ -17,7 +17,6 @@
 #include <signal.h>
 #include <sys/param.h>
 #include <pthread.h>
-#include "scan_delegate.h"
 #define DEFAULT_TIMEOUT 1000
 #define DEFAULT_MAX_CONCURRENT 1000
 #define MAX_FD_PER_PROCESS 1024
