@@ -131,9 +131,3 @@ int raw_scan(int sock,struct scan_info *info){
         free(pseudogram);
         return result;
 }
-int main(){
-   char buffer[10000];
-   get_machine_ip(buffer);
-   printf("%s",buffer);
-   return 0;
-}

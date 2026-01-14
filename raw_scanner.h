@@ -16,6 +16,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <sys/param.h>
+#include "scan_delegate.h"
 #include <pthread.h>
 #define DEFAULT_TIMEOUT 1000
 #define DEFAULT_MAX_CONCURRENT 1000

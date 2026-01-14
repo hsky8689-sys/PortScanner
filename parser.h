@@ -37,7 +37,7 @@ typedef struct parsed_input{
   int command_type;
 }parsed_input;
 
-extern struct parsed_input* prepare_result();
-extern struct parsed_input* parse(char command[MAX_CHARACTERS]);
+struct parsed_input* prepare_result();
+struct parsed_input* parse(char command[MAX_CHARACTERS]);
 extern int has_command(char command[MAX_CHARACTERS]);
 #endif

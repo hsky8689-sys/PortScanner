@@ -1,13 +1,13 @@
 #include "raw_scanner.h"
-#include "scan_delegate.h"
 int raw_sock;
-int listen_responses = 1;
+int listen_responses;
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
    socklen_t saddr_len = sizeof(saddr);
-
-   while(listen_responses){
+ 
+   fprintf(stdout,"Listening for responses...\n");
+   while(current_port<=last){
     int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
     if(size<0)continue;
 
@@ -19,22 +19,34 @@ void* listener(void* arg){
 	    results[source_port] = 1;
     else results[source_port] = 2;
    }
+   fprintf(stdout,"Listener closed\n");
    return NULL;
 }
 void* worker(void* arg){
     struct scan_info* info = (struct scan_info*)arg;
-    char my_ip[16];
+    char* my_ip = malloc(40*sizeof(char));
+    if(my_ip==NULL){
+        perror("malloc my_ip");
+	goto skip;
+    }
     get_machine_ip(my_ip);
+
     while(1){
 	    pthread_mutex_lock(&mutex);
 	    if(current_port > last){
-	        pthread_mutex_unlock(&mutex);
-		break;
-	    }
+                pthread_mutex_unlock(&mutex);
+                break;
+            }
+	    fprintf(stdout,"Currently scanning port %d\n",current_port);
+	    current_port++;
 	    pthread_mutex_unlock(&mutex);
-	    usleep(1000);
+	    
+
+	    usleep(100);
     }
+skip:
     free(info);
+    free(my_ip);
     return NULL;
 }
 int main(int argc,char** argv)
@@ -55,12 +67,12 @@ int main(int argc,char** argv)
 	timeout_ms = (argc >= 7) ? atoi(argv[6]) : DEFAULT_TIMEOUT;
 	current_port=first;
 	
-        results = calloc(65365,sizeof(int));
+        results = calloc(65536,sizeof(int));
         if(results==NULL){                     
            perror("calloc results");
 	   exit(EXIT_FAILURE);
         }
-        scanned = calloc(65365,sizeof(int));
+        scanned = calloc(65536,sizeof(int));
         if(scanned==NULL){
            perror("calloc scanned");
 	   free(results);
@@ -81,15 +93,28 @@ int main(int argc,char** argv)
                perror("malloc scan_info");
                continue;
             }
+	    info->target_ip = malloc(40*sizeof(char));
+	    if(info->target_ip==NULL){
+	       perror("malloc target ip");
+	       continue;
+	    }
+	    info->scan_type = malloc(40*sizeof(char));
+	    if(info->scan_type==NULL){
+	       perror("malloc scan type");
+	       continue;
+            }
             info->index=i;
             strcpy(info->target_ip,host);
             strcpy(info->scan_type,scan_type);
             info->timeout_ms=timeout_ms;
-            if(pthread_create(&threads[i],NULL,(void*)worker,info)<0){
+            
+	    if(pthread_create(&threads[i],NULL,(void*)worker,info)<0){
                 perror("pthread_create");
-            }
+                free(info);
+	    }
 	}
 
+        
 	if(pthread_create(&listener_thread,NULL,(void*)listener,NULL)<0){
 	    perror("pthread_create_listener");
 	}
@@ -97,7 +122,7 @@ int main(int argc,char** argv)
 	for(int i=0;i<maxc;i++){
 	     pthread_join(threads[i],NULL);
 	}
-	listen_responses = 0;
+	
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
