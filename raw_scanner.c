@@ -1,13 +1,13 @@
 #include "raw_scanner.h"
 int raw_sock;
 int listen_responses;
+char source_ip[16];
 
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
    socklen_t saddr_len = sizeof(saddr);
  
-   fprintf(stdout,"Listening for responses...\n");
    while(current_port<=last){
     int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
     if(size<0)continue;
@@ -19,32 +19,43 @@ void* listener(void* arg){
     if(tcph->syn && tcph->ack)
 	    results[source_port] = 1;
     else results[source_port] = 2;
+   
+    usleep(100);
    }
-   fprintf(stdout,"Listener closed\n");
    return NULL;
 }
 void* worker(void* arg){
     struct scan_info* info = (struct scan_info*)arg;
 
     while(1){
-	    info->port = current_port;
-	    if(scanned[current_port]){
-	        continue;
-	    }
-	    pthread_mutex_lock(&mutex);
-	    if(current_port > last){
-                pthread_mutex_unlock(&mutex);
-                break;
-            }
-	    //int result = raw_scan(raw_sock,info);
-	    if(raw_scan(raw_sock,info)>0)
-		 scanned[current_port] = 1;
-	    current_port++;
-	    pthread_mutex_unlock(&mutex);
+	    int port_to_scan = -1;
 
-	    usleep(100);
+	    pthread_mutex_lock(&mutex);
+	    if(current_port <= last){
+                port_to_scan = current_port++;
+		info->port = port_to_scan;
+            } 
+	    pthread_mutex_unlock(&mutex);
+	    if(port_to_scan == -1)break;
+
+	    if(raw_scan(raw_sock,source_ip,info)<0){
+		    perror("plange raw scanu\n");
+		    switch(errno){
+		      case EINVAL:
+			   printf("Date prost initializate\n");
+			   break;
+		      case EFAULT:
+			   printf("dest sau datagram proaste\n");
+			   break;
+		      default:
+			   printf("errno=%d\n",errno);
+			   break;
+		    }
+	    }
+	    usleep(5000);
     }
-skip:
+    free(info->target_ip);
+    free(info->scan_type);
     free(info);
     return NULL;
 }
@@ -60,9 +71,13 @@ int main(int argc,char** argv)
         }
 	const char* host = argv[1];
 	char target_ip[16];
-	char my_ip[20];
-        get_machine_ip(my_ip);
-	
+
+        get_machine_ip(source_ip);
+	if(!source_ip[0]){
+	   perror("Could not retrieve machine ip\n");
+	   return -EXIT_FAILURE;
+	}
+
 	if(inet_addr(host) == INADDR_NONE){
 		if(resolve_hostname(host,target_ip)!=0){
 		    fprintf(stderr,"Could not resolve hostname");
@@ -75,7 +90,18 @@ int main(int argc,char** argv)
 	first = atoi(argv[2]);
 	last = atoi(argv[3]);
 	const char* scan_type = argv[4];
+	
 	maxc = (argc >= 6) ? atoi(argv[5]) : DEFAULT_MAX_CONCURRENT;
+	
+	int sys_max = get_max_threads_allowed();
+	printf("System allows maximum %d processes/threads \n", sys_max);
+	
+	if(maxc > sys_max * 0.8){
+	   maxc = sys_max * 0.8;
+	   printf("Adjusted max nr of threads (%d) for stability\n",maxc);
+	}
+
+	
 	timeout_ms = (argc >= 7) ? atoi(argv[6]) : DEFAULT_TIMEOUT;
 	current_port=first;
 	listen_responses = 1;
@@ -92,7 +118,14 @@ int main(int argc,char** argv)
 	   exit(EXIT_FAILURE);
         }
 	//one raw socket needed
-	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
+	
+	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_RAW);
+	
+	struct timeval tv;
+        tv.tv_sec = 0;
+        tv.tv_usec = timeout_ms; // 0.5 secunde
+        setsockopt(raw_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+	
 	if(raw_sock < 0){
 	   perror("pthread_create raw socket");
 	   free(results);
@@ -100,6 +133,12 @@ int main(int argc,char** argv)
 	   return -EXIT_FAILURE;
 	}
 	
+	pthread_attr_t attributes;
+	pthread_attr_init(&attributes);
+
+	pthread_attr_setstacksize(&attributes,1024*1024);
+
+	listen_responses = 1;
 	for(int i=0;i<maxc;i++){
 	    struct scan_info* info = malloc(sizeof(struct scan_info));
             if(info==NULL){
@@ -109,11 +148,13 @@ int main(int argc,char** argv)
 	    info->target_ip = malloc(40*sizeof(char));
 	    if(info->target_ip==NULL){
 	       perror("malloc target ip");
+	       free(info);
 	       continue;
 	    }
 	    info->scan_type = malloc(40*sizeof(char));
 	    if(info->scan_type==NULL){
 	       perror("malloc scan type");
+	       free(info);
 	       continue;
             }
             info->index=i;
@@ -121,14 +162,14 @@ int main(int argc,char** argv)
             strcpy(info->scan_type,scan_type);
             info->timeout_ms=timeout_ms;
             
-	    if(pthread_create(&threads[i],NULL,(void*)worker,info)<0){
+	    if(pthread_create(&threads[i],&attributes,(void*)worker,info)<0){
                 perror("pthread_create");
                 free(info);
 	    }
 	}
 
         
-	if(pthread_create(&listener_thread,NULL,(void*)listener,NULL)<0){
+	if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
 	    perror("pthread_create_listener");
 	}
 	
@@ -140,7 +181,7 @@ int main(int argc,char** argv)
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	  if(results[i]>-1)
+	  if(results[i]>=-1)
 	    fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
 	close(raw_sock);

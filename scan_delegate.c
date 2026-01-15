@@ -1,5 +1,13 @@
 #include "scan_delegate.h"
-char machine_ip[16];
+
+int get_max_threads_allowed(){
+   struct rlimit limit;
+   if(getrlimit(RLIMIT_NPROC,&limit) != 0){
+      perror("getrlimit");
+      return 100;
+   }
+   return (int)limit.rlim_cur;
+}
 int resolve_hostname(const char* hostname,char *ip_buffer){
    struct addrinfo hints,*res;
    struct sockaddr_in *addr;
@@ -78,36 +86,30 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
     else if(strcmp(scan_type,"null") == 0);//all the flags are properly set
     //Specifying non existent scan types result in a null scan =))
 }
-int raw_scan(int sock,struct scan_info *info){
-
-	if(sock<0){
-	   perror("Somehow socket got closed before scan.Reopening...");
-	   sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
-	}
+int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	
+	if(!source_ip[0]){
+	   perror("Source IP not found\n");
+	   return -1;
+	}
+
 	char datagram[4096];
-	memset(datagram,0,4096);
+	memset(datagram,0,sizeof(datagram));
 
 	struct iphdr *iph = (struct iphdr*) datagram;
 	struct tcphdr *tcph = (struct tcphdr*) (datagram+sizeof(struct ip));
-	
+	memset(tcph,0,sizeof(tcph));
+
+	iph->check = 0;
 	iph->ihl = 5;
 	iph->version = 4;
 	iph->tos = 0;
-	iph->tot_len = sizeof(struct iphdr) + sizeof(struct tcphdr);
+	iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
 	iph->id = htons(54321);
 	iph->ttl = 255;
 	iph->protocol = IPPROTO_TCP;
-        
-	if(!machine_ip[0])
-	    get_machine_ip(machine_ip);
-	
-	if(!machine_ip[0]){
-	    perror("Could not retrieve machine IP\n");
-	    return -1;
-	}
 
-	iph->saddr = inet_addr(machine_ip);
+	iph->saddr = inet_addr(source_ip);
 	iph->daddr = inet_addr(info->target_ip);
 
 	tcph->source = htons(12345);///pana acum
@@ -122,23 +124,40 @@ int raw_scan(int sock,struct scan_info *info){
 	tcph->check = 0;
 	
 	struct pseudo_header psh;
+	memset(&psh,0,sizeof(struct pseudo_header));
+
 	psh.source_address = iph->saddr;
 	psh.dest_address = iph->daddr;
-	psh.placeholder = IPPROTO_TCP;
+	psh.placeholder = 0;
+	psh.protocol = IPPROTO_TCP;
 	psh.tcp_length = htons(sizeof(struct tcphdr));
 
 	int psize = sizeof(struct pseudo_header) + sizeof(struct tcphdr);
-	char pseudogram[psize+1];
-	memcpy(pseudogram,(char*)&psh,sizeof(struct pseudo_header));
-	memcpy(pseudogram + sizeof(struct pseudo_header),tcph,sizeof(struct tcphdr));
-	tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
+	unsigned char* pseudogram = calloc(1,psize+2);
+	if(pseudogram){
+	     memset(pseudogram,0,psize+2);
+	     memcpy(pseudogram,(char*)&psh,sizeof(struct pseudo_header));
+	     memcpy(pseudogram + sizeof(struct pseudo_header),tcph,sizeof(struct tcphdr));
+	     tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
+	    free(pseudogram);
+	}
 	//!!!
 	int one = 1;
         setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
 
         struct sockaddr_in dest;
-        dest.sin_family = AF_INET;
+        memset(&dest,0,sizeof(dest));
+	dest.sin_family = AF_INET;
         dest.sin_addr.s_addr = iph->daddr;
 
-        return sendto(sock, datagram, iph->tot_len, 0, (struct sockaddr *)&dest, sizeof(dest));
+	int length = sizeof(struct iphdr) + sizeof(struct tcphdr);
+        printf("length=%d\n",length);
+	int result = sendto(sock, datagram, length, 0, (struct sockaddr *)&dest, sizeof(dest));
+
+	if(result < 0){
+        int err = errno;
+              fprintf(stderr, "[ERROR] Port %d: Result=%d, Errno=%d (%s)\n", info->port, result, err, strerror(err));
+	}
+	else fprintf(stdout,"Result[%d]=%d\n",info->port,result);
+	return result;
 }

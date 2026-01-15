@@ -19,7 +19,7 @@
 #include "scan_delegate.h"
 #include <pthread.h>
 #define DEFAULT_TIMEOUT 1000
-#define DEFAULT_MAX_CONCURRENT 1000
+#define DEFAULT_MAX_CONCURRENT 500
 #define MAX_FD_PER_PROCESS 1024
 #define MAX_PORTS_PER_SOCKET 200
 #define MAX_HOSTNAME_LENGTH 50
@@ -30,4 +30,3 @@ pthread_t threads[MAX_FD_PER_PROCESS];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_t listener_thread;
 int current_port,first,last,maxc,timeout_ms;
-
