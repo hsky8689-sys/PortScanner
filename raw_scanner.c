@@ -2,25 +2,50 @@
 int raw_sock;
 int listen_responses;
 char source_ip[16];
-
+char target_ip[16];
+int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
+    if()
+}
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
    socklen_t saddr_len = sizeof(saddr);
  
-   while(current_port<=last){
-    int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
-    if(size<0)continue;
-    fprintf(stdout,"Received %d bytes of data\n",size);
-    struct iphdr* iph = (struct iphdr*) buffer;
+   while(listen_responses){
+      int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
 
-    struct tcphdr* tcph = (struct tcphdr*)(buffer + (iph->ihl*4));
-    int source_port = ntohs(tcph->source);
-    if(tcph->syn && tcph->ack)
-	    results[source_port] = 1;
-    else results[source_port] = 2;
-   
-    usleep(100);
+      if(size<0){
+          if(errno == EAGAIN || errno == EWOULDBLOCK){
+	     usleep(1000);
+	     continue;
+	  }
+	  fprintf(stderr,"Recvfrom error %s",strerror(errno));
+	  break;
+      }
+      
+      struct iphdr *iph = (struct iphdr*)buffer;
+      if(iph->protocol!=IPPROTO_TCP)continue;
+
+      unsigned short iphdrlen = iph->ihl*4;
+      struct tcphdr *tcph = (struct tcphdr*)(buffer+ iphdrlen);
+
+      int source_port = ntohs(tcph->source);
+      int dest_port = ntohs(tcph->dest);
+
+      if(dest_port == 12345){
+
+      if(source_port>=first && source_port <=last && !scanned[source_port]){
+         
+	  scanned[source_port] = 1;
+	  if (tcph->syn && tcph->ack) {
+                    results[source_port] = 1;
+                }
+                else if (tcph->rst) {
+                    results[source_port] = 2;
+                }
+	        
+         }
+      }
    }
    return NULL;
 }
@@ -70,7 +95,7 @@ int main(int argc,char** argv)
            exit(EXIT_FAILURE);
         }
 	const char* host = argv[1];
-	char target_ip[16];
+
 
         get_machine_ip(source_ip);
 	if(!source_ip[0]){
@@ -119,11 +144,15 @@ int main(int argc,char** argv)
         }
 	//one raw socket needed
 	
-	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_RAW);
+	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
 	
+	int one = 1;
+
+        setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+
 	struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = timeout_ms; // 0.5 secunde
+        tv.tv_usec = timeout_ms;
         setsockopt(raw_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 	
 	if(raw_sock < 0){
@@ -137,6 +166,10 @@ int main(int argc,char** argv)
 	pthread_attr_init(&attributes);
 
 	pthread_attr_setstacksize(&attributes,1024*1024);
+
+	if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
+            perror("pthread_create_listener");
+        }
 
 	listen_responses = 1;
 	for(int i=0;i<maxc;i++){
@@ -167,21 +200,18 @@ int main(int argc,char** argv)
                 free(info);
 	    }
 	}
-
-        
-	if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
-	    perror("pthread_create_listener");
-	}
 	
 	for(int i=0;i<maxc;i++){
 	     pthread_join(threads[i],NULL);
 	}
+
+	sleep(2);
 	listen_responses = 0;
-	
+        	
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	  if(results[i]>=-1)
+	  
 	    fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
 	close(raw_sock);

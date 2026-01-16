@@ -93,6 +93,8 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	   return -1;
 	}
 
+	srand(time(NULL));
+
 	char datagram[4096];
 	memset(datagram,0,sizeof(datagram));
 
@@ -105,7 +107,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	iph->version = 4;
 	iph->tos = 0;
 	iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
-	iph->id = htons(54321);
+	iph->id = htons(rand() % 65353);
 	iph->ttl = 255;
 	iph->protocol = IPPROTO_TCP;
 
@@ -141,9 +143,6 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	     tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
 	    free(pseudogram);
 	}
-	//!!!
-	int one = 1;
-        setsockopt(sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
 
         struct sockaddr_in dest;
         memset(&dest,0,sizeof(dest));
@@ -151,13 +150,14 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
         dest.sin_addr.s_addr = iph->daddr;
 
 	int length = sizeof(struct iphdr) + sizeof(struct tcphdr);
-        printf("length=%d\n",length);
+        
 	int result = sendto(sock, datagram, length, 0, (struct sockaddr *)&dest, sizeof(dest));
 
+	usleep(8800);
 	if(result < 0){
         int err = errno;
               fprintf(stderr, "[ERROR] Port %d: Result=%d, Errno=%d (%s)\n", info->port, result, err, strerror(err));
 	}
-	else fprintf(stdout,"Result[%d]=%d\n",info->port,result);
+	
 	return result;
 }
