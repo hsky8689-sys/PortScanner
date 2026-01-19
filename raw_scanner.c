@@ -211,9 +211,15 @@ int main(int argc,char** argv)
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	  if(!results[i]||!scanned[i])
-	   fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
+	  if(!results[i]||!scanned[i]){
+	   fprintf(stdout,"Port %d unreachable\n",i);
+	   //fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
+	  }
+	  else if(results[i]==1 && scanned[i]==1){
+	   fprintf(stdout,"Port %d opened\n",i);
+	  }
+	  else fprintf(stdout,"Port %d closed|filtered\n",i);
 
 	close(raw_sock);
 	free(scanned);
