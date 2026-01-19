@@ -4,7 +4,7 @@ int listen_responses;
 char source_ip[16];
 char target_ip[16];
 int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
-    if()
+    return 0;
 }
 void* listener(void* arg){
    char buffer[65535];
@@ -211,9 +211,10 @@ int main(int argc,char** argv)
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	  
-	    fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
+	  if(!results[i]||!scanned[i])
+	   fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
 	
+
 	close(raw_sock);
 	free(scanned);
 	free(results);

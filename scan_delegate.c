@@ -116,7 +116,11 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 
 	tcph->source = htons(12345);///pana acum
 	tcph->dest = htons(info->port);
-	tcph->seq = 0;
+	
+	uint32_t magic_seed = rand() % 10000;
+	uint32_t current_seq = magic_seed + info->port;
+	
+	tcph->seq = htonl(current_seq);
 	tcph->ack_seq = 0;
 	tcph->doff = 5;
 
