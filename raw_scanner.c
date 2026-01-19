@@ -3,6 +3,7 @@ int raw_sock;
 int listen_responses;
 char source_ip[16];
 char target_ip[16];
+uint32_t cookie;
 int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
     return 0;
 }
@@ -24,16 +25,19 @@ void* listener(void* arg){
       }
       
       struct iphdr *iph = (struct iphdr*)buffer;
-      if(iph->protocol!=IPPROTO_TCP)continue;
-
+      //if(iph->protocol!=IPPROTO_TCP)continue;
       unsigned short iphdrlen = iph->ihl*4;
       struct tcphdr *tcph = (struct tcphdr*)(buffer+ iphdrlen);
 
-      int source_port = ntohs(tcph->source);
-      int dest_port = ntohs(tcph->dest);
+      uint32_t received_ack = ntohl(tcph->ack_seq);
+      uint32_t ip_src_int = iph->saddr;
+      uint16_t port_src_int = tcph->source;
+      uint16_t port_dst_int = tcph->dest;
 
-      if(dest_port == 12345){
+      uint32_t expected_seq = cookie+ip_src_int+port_src_int+port_dst_int;
 
+      if(received_ack == expected_seq + 1){
+	      int source_port = ntohs(port_src_int);
       if(source_port>=first && source_port <=last && !scanned[source_port]){
          
 	  scanned[source_port] = 1;
@@ -145,10 +149,25 @@ int main(int argc,char** argv)
 	//one raw socket needed
 	
 	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
-	
-	int one = 1;
+	if(raw_sock < 0){
+	   perror("socket()");
+	   free(results);
+	   free(scanned);
+	   exit(EXIT_FAILURE);
+	}
 
-        setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one));
+	srand(time(NULL));
+	cookie = rand() % 0xFFFFFFFF;
+
+	int one = 1;
+	int rcvbuffer = 4*1024*1024;
+	if(setsockopt(raw_sock,SOL_SOCKET,SO_RCVBUF,&rcvbuffer,sizeof(rcvbuffer))<0){
+	    perror("setsockopt1\n");
+	}
+
+        if(setsockopt(raw_sock, IPPROTO_IP, IP_HDRINCL, &one, sizeof(one))<0){
+	perror("setsockopt2\n");
+	}
 
 	struct timeval tv;
         tv.tv_sec = 0;
@@ -211,15 +230,12 @@ int main(int argc,char** argv)
 	pthread_join(listener_thread,NULL);
 	
 	for(int i=first;i<=last;i++)
-	  if(!results[i]||!scanned[i]){
-	   fprintf(stdout,"Port %d unreachable\n",i);
-	   //fprintf(stdout,"results[%d]=%d,scanned[%d]=%d\n",i,results[i],i,scanned[i]);
-	
-	  }
-	  else if(results[i]==1 && scanned[i]==1){
-	   fprintf(stdout,"Port %d opened\n",i);
-	  }
-	  else fprintf(stdout,"Port %d closed|filtered\n",i);
+	  if(results[i]==0)
+		  fprintf(stdout,"Port %d filtered(no response)\n",i);
+	  else if(results[i]==1)
+		  fprintf(stdout,"Port %d open\n",i);
+	  else if(results[i]==2)
+		  fprintf(stdout,"Port %d closed(RST received)\n",i);
 
 	close(raw_sock);
 	free(scanned);

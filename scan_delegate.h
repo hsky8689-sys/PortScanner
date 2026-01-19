@@ -28,6 +28,7 @@ struct scan_info{
    int timeout_ms;
    struct addrinfo addr_info;
 }__attribute__((packed));
+extern uint32_t cookie;
 int get_max_threads_allowed();
 int resolve_hostname(const char* hostname,char *ip_buffer);
 void get_machine_ip(char* buffer);

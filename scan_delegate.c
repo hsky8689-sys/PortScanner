@@ -114,13 +114,15 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	iph->saddr = inet_addr(source_ip);
 	iph->daddr = inet_addr(info->target_ip);
 
-	tcph->source = htons(12345);///pana acum
+	int src_port = (rand() % 20000) + 40000;
+	tcph->source = htons(src_port);
+
 	tcph->dest = htons(info->port);
 	
-	uint32_t magic_seed = rand() % 10000;
-	uint32_t current_seq = magic_seed + info->port;
+	uint32_t seed = cookie + iph->daddr + tcph->dest + tcph->source;
 	
-	tcph->seq = htonl(current_seq);
+	tcph->seq = htonl(seed);
+
 	tcph->ack_seq = 0;
 	tcph->doff = 5;
 
