@@ -25,9 +25,11 @@ void* listener(void* arg){
       }
       
       struct iphdr *iph = (struct iphdr*)buffer;
-      //if(iph->protocol!=IPPROTO_TCP)continue;
+      
       unsigned short iphdrlen = iph->ihl*4;
       struct tcphdr *tcph = (struct tcphdr*)(buffer+ iphdrlen);
+
+      if(iph->saddr != inet_addr(target_ip))continue;
 
       uint32_t received_ack = ntohl(tcph->ack_seq);
       uint32_t ip_src_int = iph->saddr;
@@ -78,10 +80,11 @@ void* worker(void* arg){
 			   break;
 		      default:
 			   printf("errno=%d\n",errno);
+			   usleep(100);
 			   break;
 		    }
 	    }
-	    usleep(5000);
+	    //usleep(10000);
     }
     free(info->target_ip);
     free(info->scan_type);
@@ -171,7 +174,7 @@ int main(int argc,char** argv)
 
 	struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = timeout_ms;
+        tv.tv_usec = 100* timeout_ms;
         setsockopt(raw_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 	
 	if(raw_sock < 0){

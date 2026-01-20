@@ -108,7 +108,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	iph->tos = 0;
 	iph->tot_len = htons(sizeof(struct iphdr) + sizeof(struct tcphdr));
 	iph->id = htons(rand() % 65353);
-	iph->ttl = 255;
+	iph->ttl = 64;
 	iph->protocol = IPPROTO_TCP;
 
 	iph->saddr = inet_addr(source_ip);
@@ -128,7 +128,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 
 	set_tcp_flags(tcph,info->scan_type);
 
-	tcph->window = htons(5840);
+	tcph->window = htons(1024);
 	tcph->check = 0;
 	
 	struct pseudo_header psh;
@@ -159,7 +159,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
         
 	int result = sendto(sock, datagram, length, 0, (struct sockaddr *)&dest, sizeof(dest));
 
-	usleep(8800);
+	//usleep(8800);
 	if(result < 0){
         int err = errno;
               fprintf(stderr, "[ERROR] Port %d: Result=%d, Errno=%d (%s)\n", info->port, result, err, strerror(err));
