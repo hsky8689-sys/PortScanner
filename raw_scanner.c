@@ -124,7 +124,8 @@ int main(int argc,char** argv)
 	const char* scan_type = argv[4];
 	
 	maxc = (argc >= 6) ? atoi(argv[5]) : DEFAULT_MAX_CONCURRENT;
-	
+	if(maxc > DEFAULT_MAX_CONCURRENT)maxc = DEFAULT_MAX_CONCURRENT;
+
 	int sys_max = get_max_threads_allowed();
 	printf("System allows maximum %d processes/threads \n", sys_max);
 	
@@ -135,7 +136,7 @@ int main(int argc,char** argv)
 
 	
 	timeout_ms = (argc >= 7) ? atoi(argv[6]) : DEFAULT_TIMEOUT;
-	current_port=first;
+
 	listen_responses = 1;
 
         results = calloc(65536,sizeof(int));
@@ -188,50 +189,54 @@ int main(int argc,char** argv)
 	pthread_attr_init(&attributes);
 
 	pthread_attr_setstacksize(&attributes,1024*1024);
+	
+	current_port=first;
+	{
 
-	if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
-            perror("pthread_create_listener");
-        }
+		if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
+            	perror("pthread_create_listener");
+        	}
 
-	listen_responses = 1;
-	for(int i=0;i<maxc;i++){
-	    struct scan_info* info = malloc(sizeof(struct scan_info));
-            if(info==NULL){
-               perror("malloc scan_info");
-               continue;
-            }
-	    info->target_ip = malloc(40*sizeof(char));
-	    if(info->target_ip==NULL){
-	       perror("malloc target ip");
-	       free(info);
-	       continue;
-	    }
-	    info->scan_type = malloc(40*sizeof(char));
-	    if(info->scan_type==NULL){
-	       perror("malloc scan type");
-	       free(info);
-	       continue;
-            }
-            info->index=i;
-            strcpy(info->target_ip,target_ip);
-            strcpy(info->scan_type,scan_type);
-            info->timeout_ms=timeout_ms;
+		listen_responses = 1;
+		for(int i=0;i<maxc;i++){
+	    		struct scan_info* info = malloc(sizeof(struct scan_info));
+            		if(info==NULL){
+               			perror("malloc scan_info");
+               			continue;
+            		}
+	    	info->target_ip = malloc(40*sizeof(char));
+	    	if(info->target_ip==NULL){
+	       		perror("malloc target ip");
+	       		free(info);
+	       		continue;
+	    	}
+	    	info->scan_type = malloc(40*sizeof(char));
+	    		if(info->scan_type==NULL){
+	       			perror("malloc scan type");
+	       			free(info);
+	       			continue;
+            		}
+            	info->index=i;
+            	strcpy(info->target_ip,target_ip);
+            	strcpy(info->scan_type,scan_type);
+            	info->timeout_ms=timeout_ms;
             
-	    if(pthread_create(&threads[i],&attributes,(void*)worker,info)<0){
-                perror("pthread_create");
-                free(info);
-	    }
-	}
+	    	if(pthread_create(&threads[i],&attributes,(void*)worker,info)<0){
+                	perror("pthread_create");
+                	free(info);
+	    	}
+		}
 	
-	for(int i=0;i<maxc;i++){
-	     pthread_join(threads[i],NULL);
-	}
+		for(int i=0;i<maxc;i++){
+	     	pthread_join(threads[i],NULL);
+		}
 
-	sleep(2);
-	listen_responses = 0;
-        	
-	pthread_join(listener_thread,NULL);
-	
+		sleep(2);
+		listen_responses = 0;
+        	pthread_join(listener_thread,NULL);
+	        
+	}
+//	
 	for(int i=first;i<=last;i++)
 	  if(results[i]==0)
 		  fprintf(stdout,"Port %d filtered(no response)\n",i);

@@ -15,30 +15,21 @@ void* calculate_processes(void* arg){
 void create_scan_processes(int how_many){
    int first = parsed->first;
    int last = parsed->last;
-   for(int i=0;i<how_many;i++){
-      pid_t forc = fork();
-      if(forc<0){perror("fork");return;}
-      if(forc==0){
-         int start = MAX(i*MAX_FD_PER_PROCESS,first); 
-         int end = MIN((i+1)*MAX_FD_PER_PROCESS,last);
-	 if(strcmp(parsed->type_scan,"-tcp")==0){
-	     char c_start[12];
-	     char c_end[12];
-	     char c_maxc[12];
-	     char c_timeout[12];
-
-	     snprintf(c_start,sizeof(c_start),"%d",start);
-	     snprintf(c_end,sizeof(c_end),"%d",end);
-	     snprintf(c_maxc,sizeof(c_maxc),"%d",parsed->max_concurrent);
-	     snprintf(c_timeout,sizeof(c_timeout),"%d",parsed->timeout);
-
-	     execlp("./tcp_scanner","tcp_scanner",parsed->hostname,c_start,c_end,c_maxc,c_timeout,NULL);
-             fprintf(stdout,"This shouldn't appear..\n");
-	 }
-	 exit(0);
-      }
-      else wait(NULL);
+   fprintf(stdout,"Scanning ports %d-%d\n",first,last);
+   const char* type_requested = (char*)&parsed->scan_type; 
+   	fprintf(stdout,"type %s\n",type_requested);
+        //if(strcmp(type_requested,"syn")==0){
+{
+   	while(first <= last){
+        	int nexthop = first + 1000;
+        	if(nexthop > last) last = nexthop;
+		char cmd[256];
+		snprintf(cmd,sizeof(cmd),"sudo ./raw_scanner %s %d %d %s %d %d | grep -E open","cs.ubbcluj.ro",first,nexthop,"syn"/*parsed->type_scan*/,parsed->max_concurrent,parsed->timeout);
+		system(cmd);
+		first = nexthop + 1;	
+   	}
    }
+	//else fprintf(stdout,"Le fac maine ... \n");
 }
 void worker(int task_id){
     switch(task_id)

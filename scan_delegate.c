@@ -93,14 +93,12 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	   return -1;
 	}
 
-	srand(time(NULL));
-
 	char datagram[4096];
 	memset(datagram,0,sizeof(datagram));
 
 	struct iphdr *iph = (struct iphdr*) datagram;
 	struct tcphdr *tcph = (struct tcphdr*) (datagram+sizeof(struct ip));
-	memset(tcph,0,sizeof(tcph));
+	memset(tcph,0,sizeof(struct tcphdr));
 
 	iph->check = 0;
 	iph->ihl = 5;
@@ -114,7 +112,8 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	iph->saddr = inet_addr(source_ip);
 	iph->daddr = inet_addr(info->target_ip);
 
-	int src_port = (rand() % 20000) + 40000;
+	int src_port = rand() % 65353;
+	
 	tcph->source = htons(src_port);
 
 	tcph->dest = htons(info->port);
@@ -159,7 +158,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
         
 	int result = sendto(sock, datagram, length, 0, (struct sockaddr *)&dest, sizeof(dest));
 
-	//usleep(8800);
+	usleep(500);
 	if(result < 0){
         int err = errno;
               fprintf(stderr, "[ERROR] Port %d: Result=%d, Errno=%d (%s)\n", info->port, result, err, strerror(err));
