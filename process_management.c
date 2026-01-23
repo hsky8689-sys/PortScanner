@@ -16,20 +16,34 @@ void create_scan_processes(int how_many){
    int first = parsed->first;
    int last = parsed->last;
    fprintf(stdout,"Scanning ports %d-%d\n",first,last);
-   const char* type_requested = (char*)&parsed->scan_type; 
-   	fprintf(stdout,"type %s\n",type_requested);
-        //if(strcmp(type_requested,"syn")==0){
-{
+   const char* type_requested = parsed->type_scan; 
+   fprintf(stdout,"type %s\n",type_requested);
+   
+   if(strcmp(type_requested,"-tcp")==0){
+        fprintf(stdout,"Starting TCP SCAN...\n");
+        while(first <= last){
+                int nexthop = first + 10000;
+                if(nexthop > last) last = nexthop;
+                char cmd[256];
+                snprintf(cmd,sizeof(cmd),"./tcp_scanner %s %d %d %d %d",parsed->hostname,first,nexthop,parsed->max_concurrent,parsed->timeout);
+                system(cmd);
+                first = nexthop + 1;
+   }	   
+   //if(strcmp(type_requested,"syn")==0){
+/*
+	{
    	while(first <= last){
         	int nexthop = first + 1000;
         	if(nexthop > last) last = nexthop;
 		char cmd[256];
-		snprintf(cmd,sizeof(cmd),"sudo ./raw_scanner %s %d %d %s %d %d | grep -E open","cs.ubbcluj.ro",first,nexthop,"syn"/*parsed->type_scan*/,parsed->max_concurrent,parsed->timeout);
+		snprintf(cmd,sizeof(cmd),"sudo ./raw_scanner %s %d %d %s %d %d | grep -E open","cs.ubbcluj.ro",first,nexthop,"syn"parsed->type_scan,parsed->max_concurrent,parsed->timeout);
 		system(cmd);
 		first = nexthop + 1;	
    	}
-   }
+   }*/
+
 	//else fprintf(stdout,"Le fac maine ... \n");
+}
 }
 void worker(int task_id){
     switch(task_id)
@@ -45,11 +59,11 @@ void worker(int task_id){
 	    }
 	    case task_read:{
 	       fgets(command,sizeof(command),stdin);
-	       void* result = (void*)parse(command);
+	       void *result = (void*)parse(command);
 	       if(result){
 	           fprintf(stdout,"Result is not null\n");
-		   parsed=(struct parsed_input*)result;
-	           free(result);
+		   parsed = (struct parsed_input*)result;
+		   free(result);
 	       }
 	       else fprintf(stdout,"Result is null\n");
 	       break;
@@ -62,11 +76,11 @@ void worker(int task_id){
     }
 }
 void menu(){
-   int is_running = 1;
    while(1){
    worker(task_read);
-   if(parsed){worker(parsed->command_type);
-   
+   if(parsed){
+	   worker(parsed->command_type);
+  	   //free(parsed);
 	   fprintf(stdout,"'parsed' freed...\n");
    }   
    sleep(2);

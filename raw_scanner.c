@@ -3,7 +3,7 @@ int raw_sock;
 int listen_responses;
 char source_ip[16];
 char target_ip[16];
-uint32_t cookie;
+//uint32_t cookie;
 int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
     return 0;
 }
@@ -177,13 +177,6 @@ int main(int argc,char** argv)
         tv.tv_sec = 0;
         tv.tv_usec = 100* timeout_ms;
         setsockopt(raw_sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-	
-	if(raw_sock < 0){
-	   perror("pthread_create raw socket");
-	   free(results);
-	   free(scanned);
-	   return -EXIT_FAILURE;
-	}
 	
 	pthread_attr_t attributes;
 	pthread_attr_init(&attributes);

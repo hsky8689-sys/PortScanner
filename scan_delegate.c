@@ -1,5 +1,5 @@
 #include "scan_delegate.h"
-
+uint32_t cookie;
 int get_max_threads_allowed(){
    struct rlimit limit;
    if(getrlimit(RLIMIT_NPROC,&limit) != 0){
@@ -85,6 +85,53 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
 	    tcp->fin=1,tcp->psh=1,tcp->urg=1;
     else if(strcmp(scan_type,"null") == 0);//all the flags are properly set
     //Specifying non existent scan types result in a null scan =))
+}
+int udp_scan(int sock,struct scan_info* info){
+   int result = -1;
+   char message[] = "Hello?..";
+   socklen_t addrlen = sizeof(info->addr_info);
+
+   struct sockaddr_in addr = *(struct sockaddr_in*)&info->addr_info;
+   sendto(sock,message,strlen(message),0,(struct sockaddr*)&addr,addrlen);
+
+   struct pollfd pfd[1];
+   pfd[0].fd = sock;
+   pfd[0].events = POLLIN;
+
+   int ans = poll(pfd,1,info->timeout_ms);
+   if(ans == -1)perror("poll");
+   else if(ans == 0){
+
+   }else if(pfd[0].revents & POLLIN){
+      char response[1000];
+      if(recvfrom(sock,response,sizeof(response),0,NULL,NULL)>0){
+         struct icmphdr* icmph = (struct icmphdr*)(response + sizeof(struct iphdr));
+         if (icmph->type == ICMP_DEST_UNREACH && icmph->code == ICMP_PORT_UNREACH) {
+           result = 0;
+           //printf("Port %d is Closed (ICMP Port Unreachable).\n", info->port);
+       }
+           else if (icmph->type == ICMP_DEST_UNREACH &&
+             (icmph->code == ICMP_HOST_UNREACH || // 1: Host unreachable
+             icmph->code == ICMP_PROT_UNREACH || // 2: Protocol unreachable
+             icmph->code == 9 || // Communication Administratively Filtered (Source Quench)
+             icmph->code == 10 || // Communication Administratively Prohibited (Host)
+             icmph->code == 13) // Communication Administratively Prohibited (Port))
+                     ){
+    result = 2; // 2 = Filtrat
+    printf("Port %d is Filtered (ICMP Administratively Prohibited / Host Unreachable).\n", info->port);
+}
+// 3. Alt Răspuns ICMP (Poate fi o eroare de rutare sau TTL expirat)
+else {
+    result = 3; // Tratăm orice ICMP care nu e Port Unreachable ca Filtrat/Eroare
+    //printf("Port %d received unexpected ICMP Type %d, Code %d. Treated as Filtered.\n", info->port, icmph->type, icmph->code);
+}
+      }
+     else{
+        result=1;
+        //printf("Port %d opened|filtered\n",info->port);
+     }
+   }
+   return result;
 }
 int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	
