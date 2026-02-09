@@ -7,11 +7,11 @@
 #include<stdlib.h>
 #include<ctype.h>
 
-#define task_show_connections 1
-#define task_scan 2
-#define task_sniff 3
-#define task_analyze 4
-#define task_read 5
+#define task_scan 1
+#define task_sniff 2
+#define task_analyze 3
+#define task_read 4
+#define task_write 5
 #define task_exit 6
 #define DEFAULT_COMMAND task_scan
 #define MIN_PORT 1
@@ -29,7 +29,6 @@ extern char availible[50][1000];
 extern char scan_types[50][1000];
 extern char parsed_command[50][1000];
 typedef struct parsed_input{
-  int scan_type;//refference to worker's scan types
   char hostname[100];
   char type_scan[10];
   int first;
@@ -41,5 +40,5 @@ typedef struct parsed_input{
 
 struct parsed_input* prepare_result();
 struct parsed_input* parse(char command[MAX_CHARACTERS]);
-extern int has_command(char* command);
+extern int has_command(char command[]);
 #endif

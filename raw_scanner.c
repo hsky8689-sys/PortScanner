@@ -4,6 +4,7 @@ int listen_responses;
 char source_ip[16];
 char target_ip[16];
 //uint32_t cookie;
+int closed;
 int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
     return 0;
 }
@@ -232,12 +233,12 @@ int main(int argc,char** argv)
 //	
 	for(int i=first;i<=last;i++)
 	  if(results[i]==0)
-		  fprintf(stdout,"Port %d filtered(no response)\n",i);
+		  fprintf(stdout,"Port %d filtered\n",i);
 	  else if(results[i]==1)
 		  fprintf(stdout,"Port %d open\n",i);
 	  else if(results[i]==2)
-		  fprintf(stdout,"Port %d closed(RST received)\n",i);
-
+		  closed++;
+	fprintf(stdout,"%d ports closed(RST received)\n",closed);
 	close(raw_sock);
 	free(scanned);
 	free(results);
