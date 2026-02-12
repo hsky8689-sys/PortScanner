@@ -84,7 +84,6 @@ void set_tcp_flags(struct tcphdr *tcp,const char* scan_type){
     else if(strcmp(scan_type,"xmas") == 0)
 	    tcp->fin=1,tcp->psh=1,tcp->urg=1;
     else if(strcmp(scan_type,"null") == 0);//all the flags are properly set
-    //Specifying non existent scan types result in a null scan =))
 }
 int udp_scan(int sock,struct scan_info* info){
    int result = -1;
@@ -174,7 +173,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 
 	set_tcp_flags(tcph,info->scan_type);
 
-	tcph->window = htons(1024);
+	tcph->window = htons(5840);
 	tcph->check = 0;
 	
 	struct pseudo_header psh;
@@ -195,6 +194,7 @@ int raw_scan(int sock,char* source_ip,struct scan_info *info){
 	     tcph->check = calculate_checksum((unsigned short*)pseudogram,psize);
 	    free(pseudogram);
 	}
+	else perror("calloc");
 
         struct sockaddr_in dest;
         memset(&dest,0,sizeof(dest));

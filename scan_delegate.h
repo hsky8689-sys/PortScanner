@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
+#include <netinet/ip_icmp.h>
+#include <poll.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/resource.h>
@@ -34,4 +36,5 @@ int resolve_hostname(const char* hostname,char *ip_buffer);
 void get_machine_ip(char* buffer);
 unsigned short calculate_checksum(unsigned short *ptr,int nbytes);
 void set_tcp_flags(struct tcphdr *tcp,const char *scan_type);
+int udp_scan(int sock,struct scan_info *info);
 int raw_scan(int sock,char* source_ip,struct scan_info *info);

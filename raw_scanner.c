@@ -5,9 +5,6 @@ char source_ip[16];
 char target_ip[16];
 //uint32_t cookie;
 int closed;
-int validare_pachet(unsigned char* buffer, uint32_t expected_ack, uint32_t target_ip) {
-    return 0;
-}
 void* listener(void* arg){
    char buffer[65535];
    struct sockaddr_in saddr;
@@ -85,7 +82,7 @@ void* worker(void* arg){
 			   break;
 		    }
 	    }
-	    //usleep(10000);
+	    usleep(50000);
     }
     free(info->target_ip);
     free(info->scan_type);
@@ -140,12 +137,12 @@ int main(int argc,char** argv)
 
 	listen_responses = 1;
 
-        results = calloc(65536,sizeof(int));
+        results = calloc(65355,sizeof(int));
         if(results==NULL){                     
            perror("calloc results");
 	   exit(EXIT_FAILURE);
         }
-        scanned = calloc(65536,sizeof(int));
+        scanned = calloc(65355,sizeof(int));
         if(scanned==NULL){
            perror("calloc scanned");
 	   free(results);
@@ -187,10 +184,10 @@ int main(int argc,char** argv)
 	current_port=first;
 	{
 
-		if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
+/*		if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
             	perror("pthread_create_listener");
         	}
-
+*/
 		listen_responses = 1;
 		for(int i=0;i<maxc;i++){
 	    		struct scan_info* info = malloc(sizeof(struct scan_info));
@@ -227,18 +224,18 @@ int main(int argc,char** argv)
 
 		sleep(2);
 		listen_responses = 0;
-        	pthread_join(listener_thread,NULL);
+  //      	pthread_join(listener_thread,NULL);
 	        
 	}
 //	
 	for(int i=first;i<=last;i++)
-	  if(results[i]==0)
-		  fprintf(stdout,"Port %d filtered\n",i);
-	  else if(results[i]==1)
-		  fprintf(stdout,"Port %d open\n",i);
-	  else if(results[i]==2)
-		  closed++;
-	fprintf(stdout,"%d ports closed(RST received)\n",closed);
+	  if(results[i]==0);
+		  //fprintf(stdout,"Port %d filtered\n",i);
+	  else if(results[i]==1);
+		  //fprintf(stdout,"Port %d open\n",i);
+	  else if(results[i]==2);
+		  //closed++;
+	//fprintf(stdout,"%d ports closed(RST received)\n",closed);
 	close(raw_sock);
 	free(scanned);
 	free(results);

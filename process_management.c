@@ -1,6 +1,9 @@
 #include"process_management.h"
 
 pthread_mutex_t mutex=PTHREAD_MUTEX_INITIALIZER;
+void* run_sniffer(void* arg){
+     worker(task_sniff);
+}
 void* calculate_processes(void* arg){
     struct parsed_input inp = *(struct parsed_input*)arg;
     int first = inp.first;
@@ -29,7 +32,7 @@ void create_scan_processes(int how_many){
                 	int nexthop = first + 10000;
                 	if(nexthop > last) nexthop = last;
                 	char cmd[256];
-                	snprintf(cmd,sizeof(cmd),"./tcp_scanner %s %d %d %d %d",parsed->hostname,first,nexthop,parsed->max_concurrent,parsed->timeout);
+                	snprintf(cmd,sizeof(cmd),"./tcp_scanner %s %d %d %d %d",parsed->hostname,1,2,parsed->max_concurrent,parsed->timeout);
                 	system(cmd);
                 	first = nexthop + 1;
    		}
@@ -39,21 +42,9 @@ void create_scan_processes(int how_many){
        //TODO 
    }
    else if(strcmp(type_requested,"-syn")==0){
-       for(int i=0;i<processes_needed;i++){
-          pid_t forc = fork();
-	  if(forc<0){
-	     perror("fork");
-	     _exit(1);
-	  }
-	  if(forc == 0){
-	     char command[MAX_CHARACTERS];
-	     int start = MAX(1,i * 3000);
-	     int nexthop = MIN(65356,parsed->last);
-	     snprintf(command,sizeof(command),"sudo ./raw_scanner %s %d %d %d %d",parsed->hostname,start,nexthop,parsed->max_concurrent,parsed->timeout);
+	snprintf(command,sizeof(command),"sudo ./raw_scanner %s %d %d %d %d",parsed->hostname,parsed->first,parsed->last,parsed->max_concurrent,parsed->timeout);
+        for(int i=0;i<DEFAULT_RETRY;i++){
 	     system(command);
-	     _exit(0);
- 	  }
-	  sleep(2);
         }
    }
    else if(strcmp(type_requested,"-fyn")==0){
@@ -73,12 +64,28 @@ void worker(int task_id){
     switch(task_id)
     {
 	    case task_scan:{
-	       fprintf(stdout,"TASK SCAN BEING EXECUTED...\n");
-               pthread_t tid;
-	       pthread_create(&tid,NULL,calculate_processes,(void*)parsed);
-	       pthread_join(tid,NULL);
-	       fprintf(stdout,"Using %d processes for this scan\n",processes_needed);
-	       create_scan_processes(processes_needed);
+	       pid_t sniffer_pid = fork();
+	       if(sniffer_pid < 0){
+	           perror("sniffer fork()");
+		   _exit(1);
+	       }
+	       if(sniffer_pid == 0){
+	          freopen("sniffer_output.txt","w",stdout);
+		  freopen("sniffer_errors.txt","w",stderr);
+
+		  setvbuf(stdout,NULL,_IONBF,0);
+
+		  setup_sniffer(parsed->hostname,"eth0");
+		  _exit(0);
+	       }
+	       else{
+		       sleep(3);
+		       create_scan_processes(67);
+		       sleep(5);
+		       kill(sniffer_pid,SIGTERM);
+		       waitpid(sniffer_pid,NULL,0);
+
+	       }
 	       break;
 	    }
 	    case task_read:{
@@ -95,6 +102,10 @@ void worker(int task_id){
 	       }
 	       else fprintf(stdout,"Result is null\n");
 	       break;
+	    }
+	    case task_sniff:{
+	          setup_sniffer(parsed->hostname,"eth0");
+		  break;
 	    }
 	    case task_write:{
 	          break;
