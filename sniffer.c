@@ -1,22 +1,51 @@
 #define _DEFAULT_SOURCE
 #define __FAVOR_BSD
 #include "sniffer.h"
-FILE* open_file(char* filename){
-   FILE* log = fopen(filename,"a");
-   return log;
-}
+
 // Funcția care procesează pachetele
 void packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
-    fprintf(stdout,"Pachet interceptat! Lungime: %d\n", header->len);
+    if(header->len < 54)return;
+
+    //printf("HEX DUMP (bytes 34-54):\n");
+    for(int i=34; i<54 && i<header->len; i++) {
+    //    printf("%02x ", packet[i]);
+    }
+    //printf("\n");
+
     const struct ip *ip_header = (struct ip *)(packet + 14); // Sărim peste header-ul Ethernet
     int ip_header_len = ip_header->ip_hl * 4;
 
     const struct tcphdr *tcp_header = (struct tcphdr *)(packet + 14 + ip_header_len);
 
-    // Verificăm flag-urile pentru a determina starea portului
-    
-    // CAZ 1: SYN-ACK (Port Deschis)
-    // Verificăm dacă sunt setate ambele flag-uri: SYN și ACK
+    uint8_t flags = tcp_header->th_flags;
+
+    uint16_t src_port = ntohs(tcp_header->th_sport);
+    uint16_t dst_port = ntohs(tcp_header->th_dport);
+    char src_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET,&ip_header->ip_src,src_ip,INET_ADDRSTRLEN);
+
+    /*printf("[DEBUG] %s:%d->%d Flags:0x%02X (",src_ip,src_port,dst_port,flags);
+    if(flags & TH_FIN) printf("FIN ");
+    if(flags & TH_SYN) printf("SYN ");
+    if(flags & TH_RST) printf("RST ");
+    if(flags & TH_ACK) printf("ACK ");
+    printf(")\n");
+    */
+    if((flags & (TH_SYN | TH_ACK)) == (TH_SYN|TH_ACK)){
+        /*
+	printf("[+]PORT DESCHIS (SYN-ACK): %d -> %s:%d\n",dst_port,src_ip,src_port);
+	*/
+	results->port_states[dst_port] = 1;
+	return;
+    }
+    if(flags & TH_RST){
+       /*printf("[-]PORT INCHIS (RST): %d -> %s:%d\n",dst_port,src_ip,src_port);
+       fflush(stdout);
+       */
+	results->port_states[dst_port] = 2;
+    }
+   
+    /*
     if ((tcp_header->th_flags & (TH_SYN | TH_ACK)) == (TH_SYN | TH_ACK)) {
 
 	  fprintf(stdout,"[+] Port DESCHIS (SYN-ACK): %d \tla IP: %s\n",
@@ -29,58 +58,19 @@ void packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char
     // Verificăm dacă flag-ul RST este setat
     else if (tcp_header->th_flags & TH_RST) {
 	  
-	  fprintf(stdout,"[-] Port INCHIS  (RST)    : %d \tla IP: %s\n",
-               ntohs(tcp_header->th_sport),
-               inet_ntoa(ip_header->ip_src));
+//	  fprintf(stdout,"[-] Port INCHIS  (RST)    : %d \tla IP: %s\n",
+ //             ntohs(tcp_header->th_sport),
+   //           inet_ntoa(ip_header->ip_src));
 	       //fclose(log);
 	
     }
+    */
 }
-/*
-void packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
-    int offset;
-    const struct ip *ip_header;
 
-    // Încercăm să detectăm offset-ul corect
-    // Verificăm dacă la +14 avem versiunea 4 (IPv4)
-    if (((struct ip *)(packet + 14))->ip_v == 4) {
-        offset = 14;
-    } 
-    // Dacă nu, verificăm la +16 (specific interfeței "any")
-    else if (((struct ip *)(packet + 16))->ip_v == 4) {
-        offset = 16;
-    } 
-    else {
-        // Dacă niciuna nu e 4, pachetul nu e IPv4 sau e alt tip de link
-        return; 
-    }
-
-    ip_header = (struct ip *)(packet + offset);
-    int ip_header_len = ip_header->ip_hl * 4;
-
-    // Verificăm dacă pachetul chiar este TCP
-    if (ip_header->ip_p != IPPROTO_TCP) return;
-
-    const struct tcphdr *tcp_header = (struct tcphdr *)(packet + offset + ip_header_len);
-
-    // DEBUG: Printează TOT ce găsește pe TCP, indiferent de flag-uri
-    printf("[DEBUG] Pachet de la %s:%d | Flag-uri brute: 0x%02x\n", 
-           inet_ntoa(ip_header->ip_src), 
-           ntohs(tcp_header->th_sport), 
-           tcp_header->th_flags);
-
-    // Logică flag-uri
-    if ((tcp_header->th_flags & (TH_SYN | TH_ACK)) == (TH_SYN | TH_ACK)) {
-        printf("[+] Port DESCHIS (SYN-ACK): %d\n", ntohs(tcp_header->th_sport));
-    }
-    else if (tcp_header->th_flags & TH_RST) {
-        printf("[-] Port INCHIS (RST): %d\n", ntohs(tcp_header->th_sport));
-    }
-}
-*/
 void setup_sniffer(char* hostname,char* interface) {
-    setvbuf(stdout, NULL, _IONBF, 0);
 
+    printf("sniffer PID: %d, EUID: %d\n",
+           getpid(), geteuid());
     char errbuf[PCAP_ERRBUF_SIZE];
     pcap_t *handle;
     struct bpf_program fp;
@@ -130,5 +120,5 @@ void setup_sniffer(char* hostname,char* interface) {
 int main(int argc,char** argv){
    setup_sniffer("scanme.nmap.org","eth0");
    return 0;
-}*/
-
+}
+*/

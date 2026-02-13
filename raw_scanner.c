@@ -5,54 +5,6 @@ char source_ip[16];
 char target_ip[16];
 //uint32_t cookie;
 int closed;
-void* listener(void* arg){
-   char buffer[65535];
-   struct sockaddr_in saddr;
-   socklen_t saddr_len = sizeof(saddr);
- 
-   while(listen_responses){
-      int size = recvfrom(raw_sock,buffer,65535,0,(struct sockaddr*)&saddr,&saddr_len);
-
-      if(size<0){
-          if(errno == EAGAIN || errno == EWOULDBLOCK){
-	     usleep(1000);
-	     continue;
-	  }
-	  fprintf(stderr,"Recvfrom error %s",strerror(errno));
-	  break;
-      }
-      
-      struct iphdr *iph = (struct iphdr*)buffer;
-      
-      unsigned short iphdrlen = iph->ihl*4;
-      struct tcphdr *tcph = (struct tcphdr*)(buffer+ iphdrlen);
-
-      if(iph->saddr != inet_addr(target_ip))continue;
-
-      uint32_t received_ack = ntohl(tcph->ack_seq);
-      uint32_t ip_src_int = iph->saddr;
-      uint16_t port_src_int = tcph->source;
-      uint16_t port_dst_int = tcph->dest;
-
-      uint32_t expected_seq = cookie+ip_src_int+port_src_int+port_dst_int;
-
-      if(received_ack == expected_seq + 1){
-	      int source_port = ntohs(port_src_int);
-      if(source_port>=first && source_port <=last && !scanned[source_port]){
-         
-	  scanned[source_port] = 1;
-	  if (tcph->syn && tcph->ack) {
-                    results[source_port] = 1;
-                }
-                else if (tcph->rst) {
-                    results[source_port] = 2;
-                }
-	        
-         }
-      }
-   }
-   return NULL;
-}
 void* worker(void* arg){
     struct scan_info* info = (struct scan_info*)arg;
 
@@ -95,6 +47,8 @@ int main(int argc,char** argv)
 	   fprintf(stdout,"Usage ./raw_scanner <host> <first port> <last port> <scan_type> [max concurrent] [timeout]\n");
 	   return -1;
 	}
+	printf("raw_scanner PID: %d, EUID: %d\n",
+           getpid(), geteuid());
 	if(geteuid()!=0){
            fprintf(stdout,"RAW SCAN REQUIRES ROOT PRIVILEGES\n");
            exit(EXIT_FAILURE);
@@ -137,24 +91,11 @@ int main(int argc,char** argv)
 
 	listen_responses = 1;
 
-        results = calloc(65355,sizeof(int));
-        if(results==NULL){                     
-           perror("calloc results");
-	   exit(EXIT_FAILURE);
-        }
-        scanned = calloc(65355,sizeof(int));
-        if(scanned==NULL){
-           perror("calloc scanned");
-	   free(results);
-	   exit(EXIT_FAILURE);
-        }
 	//one raw socket needed
 	
 	raw_sock = socket(AF_INET,SOCK_RAW,IPPROTO_TCP);
 	if(raw_sock < 0){
 	   perror("socket()");
-	   free(results);
-	   free(scanned);
 	   exit(EXIT_FAILURE);
 	}
 
@@ -183,12 +124,6 @@ int main(int argc,char** argv)
 	
 	current_port=first;
 	{
-
-/*		if(pthread_create(&listener_thread,&attributes,(void*)listener,NULL)<0){
-            	perror("pthread_create_listener");
-        	}
-*/
-		listen_responses = 1;
 		for(int i=0;i<maxc;i++){
 	    		struct scan_info* info = malloc(sizeof(struct scan_info));
             		if(info==NULL){
@@ -221,23 +156,9 @@ int main(int argc,char** argv)
 		for(int i=0;i<maxc;i++){
 	     	pthread_join(threads[i],NULL);
 		}
-
 		sleep(2);
-		listen_responses = 0;
-  //      	pthread_join(listener_thread,NULL);
-	        
+		
 	}
-//	
-	for(int i=first;i<=last;i++)
-	  if(results[i]==0);
-		  //fprintf(stdout,"Port %d filtered\n",i);
-	  else if(results[i]==1);
-		  //fprintf(stdout,"Port %d open\n",i);
-	  else if(results[i]==2);
-		  //closed++;
-	//fprintf(stdout,"%d ports closed(RST received)\n",closed);
 	close(raw_sock);
-	free(scanned);
-	free(results);
 	return 0;
 }
