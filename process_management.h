@@ -1,9 +1,7 @@
-#include "tcp_scanner.h"
-#include "udp_scanner.h"
 #include "sniffer.h"
-#include "parser.h"
+#include <signal.h>
+#include <sys/wait.h>
 #include <sys/mman.h>
-#include <pthread.h>
 parsed_input* parsed;
 char command[MAX_CHARACTERS];
 //de schimbat display_text

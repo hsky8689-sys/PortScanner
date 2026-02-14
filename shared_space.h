@@ -12,4 +12,7 @@ typedef struct{
    char services[MAX_PORTS][SERVICE_SIZE];
    char versions[MAX_PORTS][VERSION_SIZE];
 }scan_results_t;
-scan_results_t *results = NULL;
+scan_results_t *scan_results = NULL;
+int init_shared_memory();
+void write_scan_result(struct parsed_input* parsed);
+void deallocate_shared_memory();
