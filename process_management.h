@@ -3,7 +3,7 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 parsed_input* parsed;
-char command[MAX_CHARACTERS];
+char command[MAX_CHARACTERS] = "";
 //de schimbat display_text
 char display_text[] = "1.Show active connections\n2.Scan specific connection\n-----------------\nCommand";
 extern pthread_mutex_t mutex;

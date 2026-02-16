@@ -16,7 +16,7 @@ struct parsed_input* prepare_result(){
       perror("malloc");
       return NULL;
    }
-   memset(result->hostname,0,sizeof(result->hostname));
+   memset(result,0,sizeof(struct parsed_input));
    strcpy(result->hostname,"");
    strcpy(result->type_scan,"");
    result->command_type = DEFAULT_COMMAND;

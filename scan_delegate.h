@@ -1,3 +1,5 @@
+#define __FAVOR_BSD
+#include <netinet/udp.h>
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
@@ -36,5 +38,5 @@ int resolve_hostname(const char* hostname,char *ip_buffer);
 void get_machine_ip(char* buffer);
 unsigned short calculate_checksum(unsigned short *ptr,int nbytes);
 void set_tcp_flags(struct tcphdr *tcp,const char *scan_type);
-int udp_scan(int sock,struct scan_info *info);
+int udp_scan(int sock,char* source_ip,struct scan_info *info);
 int raw_scan(int sock,char* source_ip,struct scan_info *info);

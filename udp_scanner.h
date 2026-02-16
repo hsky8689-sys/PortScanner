@@ -1,4 +1,3 @@
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,8 +18,10 @@
 #include <pthread.h>
 #include <netinet/ip_icmp.h>
 #include "scan_delegate.h"
-#define MAX_FD_PER_PROCESS 1024
-#define MAX_PORTS_PER_SOCKET 200
-#define MAX_HOSTNAME_LENGTH 50
-#define MAX_EPOLL_EVENTS 100
-#define MAX_SCANS_PER_PORT 5
+#include <stdint.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <netinet/ip.h>
+#include <netinet/ip_icmp.h>
+#include <netinet/udp.h>
+#include <time.h>

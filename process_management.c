@@ -17,6 +17,7 @@ void create_scan_processes(){
 				parsed->hostname,parsed->first,
 				parsed->last,parsed->max_concurrent
 				,parsed->timeout);
+			system(command);
    }
    else if(strcmp(type_requested,"-udp")==0){
        			snprintf(command,sizeof(command),
@@ -24,12 +25,17 @@ void create_scan_processes(){
                                 parsed->hostname,parsed->first,
                                 parsed->last,parsed->max_concurrent
                                 ,parsed->timeout);
+			for(int i=0;i<DEFAULT_RETRY;i++){
+				printf("🚀 Executing: '%s'\n", command);
+           			system(command);
+			}
    }
    else if(strcmp(type_requested,"-syn")==0 || strcmp(type_requested,"-fyn")==0 || strcmp(type_requested,"-null")==0 || strcmp(type_requested,"xmas")==0){
 	strcpy(type_requested,type_requested+1);
 	snprintf(command,sizeof(command),"sudo ./raw_scanner %s %d %d %s %d %d",parsed->hostname,parsed->first,parsed->last,type_requested,parsed->max_concurrent,parsed->timeout);
         for(int i=0;i<DEFAULT_RETRY;i++){
-	     system(command);
+	   printf("🚀 Executing: '%s'\n", command);  
+	   system(command);
         }
    }
 }
@@ -38,6 +44,10 @@ void worker(int task_id){
     switch(task_id)
     {
 	    case task_scan:{
+ 	       if(init_shared_memory()<0){
+      		perror("nu s-a initializat memoria");
+      		_exit(1);
+   	       }
 
 	       pid_t sniffer_pid = fork();
 	       if(sniffer_pid < 0){
@@ -47,12 +57,11 @@ void worker(int task_id){
 	       if(sniffer_pid == 0){
 		  setvbuf(stdout, NULL, _IONBF, 0);
         	  setvbuf(stderr, NULL, _IONBF, 0);
-        
-		  setup_sniffer(parsed->hostname,"eth0");
+		  worker(task_sniff);
 		  _exit(0);
 	       }
 	       else{
-	          sleep(2);
+	          sleep(10);
 		  create_scan_processes();
 		  sleep(5);
 		  kill(sniffer_pid,SIGTERM);
@@ -77,11 +86,14 @@ void worker(int task_id){
 	       break;
 	    }
 	    case task_sniff:{
-		  if(init_shared_memory()<0){
-		  	perror("mmap init\n");
-			break;
-		  }
-	          setup_sniffer(parsed->hostname,"eth0");
+		  char *type_requested =  parsed->type_scan;
+		  if(strcmp(type_requested,"-syn")==0 || 
+		     strcmp(type_requested,"-fyn")==0 || 
+		     strcmp(type_requested,"-null")==0 || 
+		     strcmp(type_requested,"-xmas")==0)
+	              setup_tcp_sniffer(parsed->hostname,"eth0");
+		  if(strcmp(type_requested,"-udp")==0)
+		      setup_udp_sniffer(parsed->hostname,"eth0");
 		  break;
 	    }
 	    case task_write:{
@@ -97,7 +109,9 @@ void worker(int task_id){
 }
 int main(){
    worker(task_read);
+   
    worker(parsed->command_type);
    if(parsed)free(parsed);
+   
    return 0;
 }
