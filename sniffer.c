@@ -4,6 +4,7 @@
 
 static pcap_t *main_sniffer = NULL;
 static volatile sig_atomic_t stop_sniffing = 0;
+static char* target_host;
 
 void sigterm_handler(int sig){
    stop_sniffing = 1;
@@ -169,7 +170,7 @@ void udp_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_
     int ip_hlen = ip_header->ip_hl * 4;
 
     struct in_addr target_ip;
-    inet_aton("45.33.32.156", &target_ip);  // scanme.nmap.org
+    inet_aton(target_host, &target_ip);
     if(ip_header->ip_src.s_addr != target_ip.s_addr) return;
     if(ip_header->ip_p != IPPROTO_ICMP) return;
 
@@ -218,6 +219,7 @@ void setup_udp_sniffer(char* hostname,char* interface){
         net = 0; mask = 0;
     }
 
+    strncpy(target_ip,hostname,strlen(hostname));
     main_sniffer = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if(!main_sniffer) {
         fprintf(stderr, " pcap_open_live %s: %s\n", dev, errbuf);
