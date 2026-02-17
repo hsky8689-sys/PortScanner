@@ -2,7 +2,24 @@
 #define __FAVOR_BSD
 #include "sniffer.h"
 
-// Funcția care procesează pachetele
+static pcap_t *main_sniffer = NULL;
+static volatile sig_atomic_t stop_sniffing = 0;
+
+void sigterm_handler(int sig){
+   stop_sniffing = 1;
+   if(main_sniffer)
+	   pcap_breakloop(main_sniffer);
+}
+
+void setup_cleanup_signal(){
+   struct sigaction sa;
+   sa.sa_handler = sigterm_handler;
+   sa.sa_flags = 0;
+   sigemptyset(&sa.sa_mask);
+   sigaction(SIGTERM,&sa,NULL);
+   sigaction(SIGINT,&sa,NULL);
+}
+
 void syn_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
     if(header->len < 54)return;
     
@@ -83,11 +100,12 @@ void udp_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_
         }
     }
 }
-void setup_udp_sniffer(char* hostname,char* interface){
-	printf(" UDP Sniffer PID: %d (target: %s)\n", getpid(), hostname);
+void setup_udp_sniffer(char* hostname,char* interface){ 
+    setup_cleanup_signal();
+
+    printf(" UDP Sniffer PID: %d (target: %s)\n", getpid(), hostname);
 
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *handle;
     struct bpf_program fp;
 
     char filter_exp[128];
@@ -101,29 +119,30 @@ void setup_udp_sniffer(char* hostname,char* interface){
         net = 0; mask = 0;
     }
 
-    handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
-    if(!handle) {
+    main_sniffer = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    if(!main_sniffer) {
         fprintf(stderr, " pcap_open_live %s: %s\n", dev, errbuf);
         return;
     }
 
     // Compile + set BPF filter
-    if(pcap_compile(handle, &fp, filter_exp, 0, net) == -1 ||
-       pcap_setfilter(handle, &fp) == -1) {
-        fprintf(stderr, " BPF '%s': %s\n", filter_exp, pcap_geterr(handle));
+    if(pcap_compile(main_sniffer, &fp, filter_exp, 0, net) == -1 ||
+       pcap_setfilter(main_sniffer, &fp) == -1) {
+        fprintf(stderr, " BPF '%s': %s\n", filter_exp, pcap_geterr(main_sniffer));
     }
 
     printf(" UDP Sniffer live: '%s'\n", filter_exp);
-    pcap_loop(handle, 0, udp_packet_handler, NULL);
+    pcap_loop(main_sniffer, 0, udp_packet_handler, NULL);
 
-    pcap_close(handle);
+    pcap_close(main_sniffer);
 }
 void setup_tcp_sniffer(char* hostname,char* interface) {
 
+    setup_cleanup_signal();
     printf("sniffer PID: %d, EUID: %d\n",
            getpid(), geteuid());
     char errbuf[PCAP_ERRBUF_SIZE];
-    pcap_t *handle;
+
     struct bpf_program fp;
     
     // MODIFICARE FILTRU:
@@ -144,31 +163,31 @@ void setup_tcp_sniffer(char* hostname,char* interface) {
         mask = 0;
     }
 
-    handle = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
-    if (handle == NULL) {
+    main_sniffer = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
+    if (main_sniffer == NULL) {
         fprintf(stderr, "Nu pot deschide device-ul %s: %s\n", dev, errbuf);
         return;
     }
 
     // Compilăm noul filtru
-    if (pcap_compile(handle, &fp, filter_exp, 0, net) == -1) {
-        fprintf(stderr, "Eroare filtru BPF: %s\n", pcap_geterr(handle));
+    if (pcap_compile(main_sniffer, &fp, filter_exp, 0, net) == -1) {
+        fprintf(stderr, "Eroare filtru BPF: %s\n", pcap_geterr(main_sniffer));
         return;
     }
 
-    if (pcap_setfilter(handle, &fp) == -1) {
-        fprintf(stderr, "Eroare setare filtru: %s\n", pcap_geterr(handle));
+    if (pcap_setfilter(main_sniffer, &fp) == -1) {
+        fprintf(stderr, "Eroare setare filtru: %s\n", pcap_geterr(main_sniffer));
         return;
     }
 
-    pcap_setnonblock(handle, 1, errbuf);  // Non-blocking
-    pcap_setdirection(handle, PCAP_D_IN);
+    pcap_setnonblock(main_sniffer, 1, errbuf);  // Non-blocking
+    pcap_setdirection(main_sniffer, PCAP_D_IN);
 
     printf("Sniffer pornit pe %s.\nFiltrez pachete SYN-ACK (Open) și RST (Closed)...\n", dev);
     
-    pcap_loop(handle, 0, syn_packet_handler, NULL);
+    pcap_loop(main_sniffer, 0, syn_packet_handler, NULL);
 
-    pcap_close(handle);
+    pcap_close(main_sniffer);
 }
 /*
 int main(int argc,char** argv){

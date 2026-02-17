@@ -36,10 +36,33 @@ void write_scan_result(struct parsed_input* parsed){
                          ,scan_results->versions[i]);
         }
      if(opened>0){
-         if(filtered >= closed)
+	 int shown = 0;
+         if(filtered >= closed){
 		 printf("%d filtered ports(not shown)\n",filtered);
+	         for(int i = parsed->first; i<=parsed->last && shown<10;i++){
+		 	int state = scan_results->port_states[i];
+           		char* service = scan_results->services[i];
+           		char* version = scan_results->versions[i];
+			if(state == 2)
+			    printf(" %d  | CLOSED | %s | %s \n",i
+                         	,scan_results->services[i]
+                         	,scan_results->versions[i]);
+		 
+		 }
+			 
+	 } 
 	 else
 		 printf("%d closed ports(not shown)\n",closed);
+	 	 for(int i = parsed->first; i<=parsed->last && shown<10;i++){
+                        int state = scan_results->port_states[i];
+                        char* service = scan_results->services[i];
+                        char* version = scan_results->versions[i];
+                        if(state == 3)
+                            printf(" %d  | FILTERED | %s | %s \n",i
+                                ,scan_results->services[i]
+                                ,scan_results->versions[i]);
+
+                 }
      }
      else{
         int shown = 0;
@@ -47,7 +70,7 @@ void write_scan_result(struct parsed_input* parsed){
 	   int state = scan_results->port_states[i];
 	   char* service = scan_results->services[i];
 	   char* version = scan_results->versions[i];
-	   if(state == 2|| state == 3){
+	   if(state == 2|| state == 0){
 	       	   printf("%d | %s | %s | %s\n",i,state == 2 ? "CLOSED":"FILTERED"
 			 ,strlen(service) > 0 ? service : "Unknown"
 			 ,strlen(version) > 0 ? version : "Unknown");

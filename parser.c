@@ -33,7 +33,7 @@ int split_command(char command[MAX_CHARACTERS]){
     int index = 0;
     while(word != NULL){
             strcpy(parsed_command[index],word);
-            fprintf(stdout,"current word : %s of length %ld\n",word,strlen(word));
+           
             word = strtok(NULL," ");
             index ++;
     }
@@ -52,7 +52,7 @@ int parse_scan_request(char command[MAX_CHARACTERS],struct parsed_input *res){
 
         if(strcmp(parsed_command[0],APP_NAME)){
               ok_input = 0;
-              fprintf(stdout,"n-are numele aplicatiei\n");
+              
               return ok_input;
         }
         fprintf(stdout,"words:=%d\n",words);
@@ -128,7 +128,7 @@ struct parsed_input* parse(char command[MAX_CHARACTERS]) {
 
     // check scan type request (nu permiți -tcp și -udp simultan)
     if (parse_scan_request(command, result) == 0){
-            fprintf(stdout,"result = null");
+            //fprintf(stdout,"result = null");
             //free(result);
     }
 
