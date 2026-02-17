@@ -14,7 +14,7 @@ int init_shared_memory(){
 }
 void write_scan_result(struct parsed_input* parsed){
      printf("__________SCAN_FINISHED_____________\n");
-     printf("PORT NUMBER | STATE | SERVICE | VERSION\n");
+     printf("PORT NUMBER | STATE | BANNER\n");
      
      int filtered = 0;
      int closed = 0;
@@ -31,9 +31,8 @@ void write_scan_result(struct parsed_input* parsed){
     
      for(int i=parsed->first;i<=parsed->last;i++){
         if(scan_results->port_states[i]==PORT_OPENED)
-                printf(" %d  | OPENED | %s | %s \n",i
-                         ,scan_results->services[i]
-                         ,scan_results->versions[i]);
+                printf(" %d  | OPENED | %s \n",i
+                         ,scan_results->banners[i]);
         }
      if(opened>0){
 	 int shown = 0;
@@ -43,10 +42,11 @@ void write_scan_result(struct parsed_input* parsed){
 		 	int state = scan_results->port_states[i];
            		char* service = scan_results->services[i];
            		char* version = scan_results->versions[i];
-			if(state == 2)
-			    printf(" %d  | CLOSED | %s | %s \n",i
-                         	,scan_results->services[i]
-                         	,scan_results->versions[i]);
+			if(state == 2){
+			    printf(" %d  | CLOSED | %s \n",i
+                         	,scan_results->banners[i]);
+			 	shown++;	
+			}
 		 
 		 }
 			 
@@ -57,10 +57,11 @@ void write_scan_result(struct parsed_input* parsed){
                         int state = scan_results->port_states[i];
                         char* service = scan_results->services[i];
                         char* version = scan_results->versions[i];
-                        if(state == 3)
-                            printf(" %d  | FILTERED | %s | %s \n",i
-                                ,scan_results->services[i]
-                                ,scan_results->versions[i]);
+                        if(state == 0){
+                            printf(" %d  | FILTERED | %s\n",i
+                                ,scan_results->banners[i]);
+				shown++;
+			    }
 
                  }
      }
@@ -70,10 +71,10 @@ void write_scan_result(struct parsed_input* parsed){
 	   int state = scan_results->port_states[i];
 	   char* service = scan_results->services[i];
 	   char* version = scan_results->versions[i];
+	   char* banner = scan_results->banners[i];
 	   if(state == 2|| state == 0){
-	       	   printf("%d | %s | %s | %s\n",i,state == 2 ? "CLOSED":"FILTERED"
-			 ,strlen(service) > 0 ? service : "Unknown"
-			 ,strlen(version) > 0 ? version : "Unknown");
+	       	   printf("%d | %s | %s",i,state == 2 ? "CLOSED":"FILTERED"
+			 ,strlen(banner) > 0 ? banner : "Unknown");
 		   shown++;
 	   }
 	}

@@ -2,6 +2,8 @@
 #include <netinet/ip_icmp.h>
 #include <pcap/pcap.h>
 #include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>

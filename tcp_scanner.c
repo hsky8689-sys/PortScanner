@@ -17,24 +17,18 @@ static int set_nonblock(int fd){
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-/* start a non-blocking connect into slot 's'; returns:
-   1 = immediate success (rare)
-   0 = immediate failure (connect refused)
-  -1 = started and pending (EINPROGRESS)
-  -2 = fatal (alloc/epoll-like failure) */
 static int start_connect_slot(int ep_port, struct slot *s, struct sockaddr *addr_template, socklen_t alen, int port) {
     int fd = socket(addr_template->sa_family, SOCK_STREAM, 0);
     if (fd < 0) return -2;
     if (set_nonblock(fd) < 0) { close(fd); return -2; }
 
-    // copy template and set port
     if (addr_template->sa_family == AF_INET) {
         struct sockaddr_in tmp;
         memcpy(&tmp, addr_template, sizeof(tmp));
         tmp.sin_port = htons((uint16_t)port);
         int rc = connect(fd, (struct sockaddr*)&tmp, sizeof(tmp));
-        if (rc == 0) { close(fd); return 1; } // instant connect
-        if (rc < 0 && errno != EINPROGRESS) { close(fd); return 0; } // immediate fail
+        if (rc == 0) { close(fd); return 1; }
+        if (rc < 0 && errno != EINPROGRESS) { close(fd); return 0; }
     } else if (addr_template->sa_family == AF_INET6) {
         struct sockaddr_in6 tmp6;
         memcpy(&tmp6, addr_template, sizeof(tmp6));
@@ -46,7 +40,7 @@ static int start_connect_slot(int ep_port, struct slot *s, struct sockaddr *addr
         close(fd); return 0;
     }
 
-    // pending
+    
     s->fd = fd;
     s->port = port;
     s->start_ms = now_ms();
@@ -65,13 +59,11 @@ int main(int argc, char **argv){
     int timeout_ms = (argc >= 6) ? atoi(argv[5]) : 500;
     if (first < 1 || last < first || maxc <= 0) { fprintf(stderr,"bad args\n"); return 1; }
 
-    // resolve host (IPv4/IPv6 prefer IPv4 first)
     struct addrinfo hints = {0}, *res = NULL;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_family = AF_UNSPEC;
     if (getaddrinfo(host, NULL, &hints, &res) != 0) { perror("getaddrinfo"); return 1; }
 
-    // pick first usable (prefer AF_INET)
     struct sockaddr_storage addr_st;
     socklen_t alen = 0;
     struct addrinfo *rp;
@@ -86,7 +78,8 @@ int main(int argc, char **argv){
     freeaddrinfo(res);
 
     int total = last - first + 1;
-    unsigned char *result = calloc(total, 1); // 0 = closed/unknown, 1 = open
+    unsigned char *result = calloc(total, 1);
+
     if (!result) { perror("calloc"); return 1; }
 
     struct slot *slots = calloc(maxc, sizeof(struct slot));
@@ -97,7 +90,6 @@ int main(int argc, char **argv){
     int active = 0;
     int next_port = first;
 
-    // bootstrap
     while (next_port <= last && active < maxc) {
         int rc = start_connect_slot(next_port, &slots[active], (struct sockaddr*)&addr_st, alen, next_port);
         if (rc == 1) { result[next_port - first] = 1; printf("open: %d (instant)\n", next_port); }
@@ -105,12 +97,12 @@ int main(int argc, char **argv){
             pfds[active].fd = slots[active].fd;
             pfds[active].events = POLLOUT;
             active++;
-        } // rc == 0 -> immediate fail, just continue
+        }
         next_port++;
     }
 
     while (active > 0 || next_port <= last) {
-        int poll_timeout = 100; // wake periodically to check timeouts
+        int poll_timeout = 100;
         int n = poll(pfds, active, poll_timeout);
         long long now = now_ms();
 
@@ -120,7 +112,6 @@ int main(int argc, char **argv){
             break;
         }
 
-        // handle ready fds
         for (int i = 0; i < active; ++i) {
             if (pfds[i].fd < 0) continue;
             if (pfds[i].revents == 0) continue;
@@ -129,43 +120,26 @@ int main(int argc, char **argv){
             int port = slots[i].port;
 
             if (pfds[i].revents & (POLLERR | POLLHUP)) {
-                // check error
                 int so_err = 0; socklen_t sl = sizeof(so_err);
                 if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_err, &sl) < 0) so_err = errno;
-                if (so_err == 0) {
-                    result[port - first] = 1;
-                  //  printf("open: %d\n", port);
-                } else {
-                    // closed/refused
-                    // printf("closed: %d err=%s\n", port, strerror(so_err));
-                }
+                if (so_err == 0) result[port - first] = 1;
+                
             } else if (pfds[i].revents & POLLOUT) {
                 int so_err = 0; socklen_t sl = sizeof(so_err);
                 if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_err, &sl) < 0) so_err = errno;
-                if (so_err == 0) {
-                    result[port - first] = 1;
-                    //printf("open: %d\n", port);
-                } else {
-                    //printf("closed: %d err=%s\n", port, strerror(so_err));
-                }
+                if (so_err == 0) result[port - first] = 1;
+                    
             }
-
-            // cleanup slot i
             close(fd);
             slots[i].fd = -1;
             pfds[i].fd = -1;
 
-            // mark consumed
-            // note: if connection was instant earlier we already marked result
-            // advance to next_port if available
             if (next_port <= last) {
                 int p = next_port++;
                 int rc = start_connect_slot(p, &slots[i], (struct sockaddr*)&addr_st, alen, p);
                 if (rc == 1) {
                     result[p - first] = 1;
-                    //printf("open: %d (instant)\n", p);
-                    // slot remains free, try assign another immediately by decreasing i to revisit
-                    // to avoid complexity, we'll assign pfds[i] = -1 and attempt refill below
+                  
                     pfds[i].fd = -1;
                     slots[i].fd = -1;
                 } else if (rc == -1) {
@@ -173,23 +147,20 @@ int main(int argc, char **argv){
                     pfds[i].events = POLLOUT;
                     pfds[i].revents = 0;
                 } else {
-                    // immediate fail -> leave slot to be filled by next loop
+                    
                     pfds[i].fd = -1;
                     slots[i].fd = -1;
                 }
             } else {
-                // no more ports; shrink active area by moving last active into i
-                // find last active index (active-1) and move to i if i is not last
+               
                 if (i < active - 1) {
-                    // move last into here
                     pfds[i] = pfds[active - 1];
                     slots[i] = slots[active - 1];
-                    // restart processing this index in next iteration (decrement i so for(i++) cancels)
-                    i--; // we'll process moved entry in later loop iterations
+                    i--;
                 }
                 active--;
             }
-        } // end for events
+        } 
 
         // fill free slots if we had instant successes above
         for (int i = 0; i < maxc && next_port <= last; ++i) {
@@ -200,7 +171,7 @@ int main(int argc, char **argv){
             int rc = start_connect_slot(p, &slots[i], (struct sockaddr*)&addr_st, alen, p);
             if (rc == 1) {
                 result[p - first] = 1;
-                //printf("open: %d (instant)\n", p);
+                
                 continue;
             } else if (rc == -1) {
                 pfds[i].fd = slots[i].fd;
@@ -217,35 +188,33 @@ int main(int argc, char **argv){
             if (pfds[i].fd < 0) continue;
             if (slots[i].start_ms > 0 && now - slots[i].start_ms >= timeout_ms) {
                 int port = slots[i].port;
-                //printf("timeout: %d\n", port);
+                
                 close(pfds[i].fd);
                 pfds[i].fd = -1; slots[i].fd = -1;
-                // try to assign next port immediately
+            
                 if (next_port <= last) {
                     int p = next_port++;
                     int rc = start_connect_slot(p, &slots[i], (struct sockaddr*)&addr_st, alen, p);
-                    if (rc == 1) { result[p - first] = 1; 
-			    //printf("open: %d (instant)\n", p); 
-			    }
+                    if (rc == 1) result[p - first] = 1; 
+			   
+			    
                     else if (rc == -1) { pfds[i].fd = slots[i].fd; pfds[i].events = POLLOUT; pfds[i].revents = 0; }
                 } else {
-                    // shrink active set: move last
+                    
                     if (i < active - 1) {
                         pfds[i] = pfds[active - 1];
                         slots[i] = slots[active - 1];
-                        i--; // re-evaluate moved
+                        i--;
                     }
                     active--;
                 }
             }
         }
-    } // main loop
-
-    // print results
+    }
     printf("Scan finished. Open ports:\n");
     for (int p = first; p <= last; ++p) if (result[p - first]) printf("%d\n", p);
 
-    // cleanup
+    
     for (int i = 0; i < maxc; ++i) if (pfds[i].fd >= 0) close(pfds[i].fd);
     free(result);
     free(slots);

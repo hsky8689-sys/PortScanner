@@ -20,10 +20,125 @@ void setup_cleanup_signal(){
    sigaction(SIGINT,&sa,NULL);
 }
 
+const char* default_services[65536] = {
+    [0] = "reserved",
+    [20] = "ftp-data",
+    [21] = "ftp",
+    [22] = "ssh",
+    [23] = "telnet",
+    [25] = "smtp",
+    [53] = "domain",
+    [80] = "http",
+    [110] = "pop3",
+    [111] = "rpcbind",
+    [123] = "ntp",
+    [143] = "imap2",
+    [443] = "https",
+    [993] = "imaps",
+    [995] = "pop3s",
+
+    [9929] = "unknown_service/emc_networker",
+
+    // Backdoor common
+    [31337] = "elite_backdoor",
+
+    // Other common services
+    [3306] = "mysql",
+    [3389] = "ms-wbt-server",
+    [5432] = "postgresql",
+    [5900] = "vnc",
+    [8080] = "http-alt",
+};
+
+char* get_default_service(int port) {
+    if (port >= 0 && port < 65536 && default_services[port]) {
+        return strdup(default_services[port]);
+    }
+    return "unknown";
+}
+
+char* grab_raw_banner(const char* ip, int port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return get_default_service(port);
+    
+    int flag = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+    
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
+    
+    struct timeval tv = {8, 0};
+    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+    
+    int attempts = 0;
+    while (attempts < 2) {
+        if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) == 0) {
+            break;
+        }
+        attempts++;
+        sleep(1);
+    }
+    
+    if (attempts == 2) {
+        close(sock);
+        return get_default_service(port);
+    }
+    
+    char buffer[4096] = {0};
+    fd_set readfds;
+    int total_bytes = 0;
+    
+    for (int i = 0; i < 10; i++) {
+        FD_ZERO(&readfds);
+        FD_SET(sock, &readfds);
+        struct timeval timeout = {1, 0};
+        
+        int ready = select(sock + 1, &readfds, NULL, NULL, &timeout);
+        
+        if (ready > 0 && FD_ISSET(sock, &readfds)) {
+            int bytes = recv(sock, buffer + total_bytes, sizeof(buffer) - total_bytes - 1, 0);
+            if (bytes > 0) {
+                total_bytes += bytes;
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    
+    close(sock);
+    
+    if (total_bytes == 0) {
+        return get_default_service(port);
+    }
+    
+    buffer[total_bytes] = '\0';
+    
+    for (int i = 0; i < total_bytes; i++) {
+        unsigned char c = buffer[i];
+        if (c < 32 || c > 126) {
+            buffer[i] = '.';
+        }
+    }
+    
+    
+    while (total_bytes > 0 && buffer[total_bytes-1] == '.') {
+        buffer[--total_bytes] = '\0';
+    }
+    
+    char* end = strstr(buffer, "\r\n\r\n");
+    if (end) *end = '\0';
+    
+    return strdup(buffer);
+}
+
 void syn_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet) {
     if(header->len < 54)return;
     
-    const struct ip *ip_header = (struct ip *)(packet + 14); // Sărim peste header-ul Ethernet
+    const struct ip *ip_header = (struct ip *)(packet + 14);
     int ip_header_len = ip_header->ip_hl * 4;
 
     const struct tcphdr *tcp_header = (struct tcphdr *)(packet + 14 + ip_header_len);
@@ -33,28 +148,22 @@ void syn_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_
     uint16_t src_port = ntohs(tcp_header->th_sport);
     uint16_t dst_port = ntohs(tcp_header->th_dport);
     
-    if(scan_results->port_states[dst_port]!=0)
-	    return;
+    if(scan_results->port_states[src_port]!=0) return;
 
     char src_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET,&ip_header->ip_src,src_ip,INET_ADDRSTRLEN);
-  
+    
     if((flags & (TH_SYN | TH_ACK)) == (TH_SYN|TH_ACK)){
-        
-	//printf("[+]PORT DESCHIS (SYN-ACK): %d -> %s:%d\n",dst_port,src_ip,src_port);
-	
+	char* banner = grab_raw_banner(src_ip,src_port);
+    strncpy(scan_results->banners[src_port],banner,strlen(banner));
 	scan_results->port_states[src_port] = 1;
 	return;
     }
-    if(flags & TH_RST){
-       //printf("[-]PORT INCHIS (RST): %d -> %s:%d\n",dst_port,src_ip,src_port);
-       //fflush(stdout);
-       
+    if(flags & TH_RST)
 	scan_results->port_states[src_port] = 2;
-    }
 }
 void udp_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_char *packet){
-	    if(header->len < 36) return;  // cica 42 Min IP+ICMP+UDP size
+	    if(header->len < 36) return;
 
     const struct ip *ip_header = (const struct ip*)(packet + 14);
     int ip_hlen = ip_header->ip_hl * 4;
@@ -66,22 +175,16 @@ void udp_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_
 
     const struct icmphdr *icmp = (const struct icmphdr*)(packet + 14 + ip_hlen);
 
-    // 🔥 ICMP Destination Unreachable (UDP probe replies)
     if(icmp->type == ICMP_DEST_UNREACH) {
-        printf("🎯 ICMP DEST_UNREACH Type=%d Code=%d\n", icmp->type, icmp->code);
-
-        // 🔥 Extrage UDP header din ICMP payload
         const struct udphdr *udph = (const struct udphdr*)(packet + 14 + ip_hlen + 8);
-        uint16_t dst_port = ntohs(udph->dest);  // Portul TĂU scanat!
+        uint16_t dst_port = ntohs(udph->dest);
 
         if(dst_port < 1 || dst_port > 65535) return;
 
-        // Verifică dacă deja scanat
         if(scan_results->port_states[dst_port] != 0) return;
 
         switch(icmp->code) {
             case ICMP_PORT_UNREACH:  // Port CLOSED
-                printf(" UDP Port %d CLOSED (Port Unreachable)\n", dst_port);
                 scan_results->port_states[dst_port] = 2;  // CLOSED
                 break;
 
@@ -90,20 +193,16 @@ void udp_packet_handler(u_char *args, const struct pcap_pkthdr *header, const u_
             case 9:  // Admin Filtered
             case 10: // Admin Prohibited
             case 13:
-                printf("🔒 UDP Port %d FILTERED (Code %d)\n", dst_port, icmp->code);
                 scan_results->port_states[dst_port] = 3;  // FILTERED
                 break;
 
             default:
-                printf("⚠️  UDP Port %d UNKNOWN ICMP Code %d\n", dst_port, icmp->code);
                 break;
         }
     }
 }
 void setup_udp_sniffer(char* hostname,char* interface){ 
     setup_cleanup_signal();
-
-    printf(" UDP Sniffer PID: %d (target: %s)\n", getpid(), hostname);
 
     char errbuf[PCAP_ERRBUF_SIZE];
     struct bpf_program fp;
@@ -125,72 +224,53 @@ void setup_udp_sniffer(char* hostname,char* interface){
         return;
     }
 
-    // Compile + set BPF filter
     if(pcap_compile(main_sniffer, &fp, filter_exp, 0, net) == -1 ||
        pcap_setfilter(main_sniffer, &fp) == -1) {
         fprintf(stderr, " BPF '%s': %s\n", filter_exp, pcap_geterr(main_sniffer));
     }
 
-    printf(" UDP Sniffer live: '%s'\n", filter_exp);
     pcap_loop(main_sniffer, 0, udp_packet_handler, NULL);
 
     pcap_close(main_sniffer);
 }
 void setup_tcp_sniffer(char* hostname,char* interface) {
-
     setup_cleanup_signal();
-    printf("sniffer PID: %d, EUID: %d\n",
-           getpid(), geteuid());
     char errbuf[PCAP_ERRBUF_SIZE];
 
     struct bpf_program fp;
-    
-    // MODIFICARE FILTRU:
-    // "tcp" - orice pachet TCP
-    // "((tcp[tcpflags] & (tcp-syn|tcp-ack) == (tcp-syn|tcp-ack))" - care este SYN-ACK
-    // " or " - SAU
-    // "(tcp[tcpflags] & tcp-rst != 0))" - care are flag-ul RST setat
-    //char filter_exp[] = "tcp and ((tcp[tcpflags] & (tcp-syn|tcp-ack) == (tcp-syn|tcp-ack)) or (tcp[tcpflags] & tcp-rst != 0))";
     char filter_exp[] = "tcp";
 
     bpf_u_int32 mask;
     bpf_u_int32 net;
-    char *dev = interface; // Asigură-te că aceasta este interfața corectă
+    char *dev = interface;
 
     if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
-        fprintf(stderr, "Nu pot obține masca pentru %s: %s\n", dev, errbuf);
+        fprintf(stderr, "Cannot get mask for %s: %s\n", dev, errbuf);
         net = 0;
         mask = 0;
     }
 
     main_sniffer = pcap_open_live(dev, BUFSIZ, 1, 1000, errbuf);
     if (main_sniffer == NULL) {
-        fprintf(stderr, "Nu pot deschide device-ul %s: %s\n", dev, errbuf);
+        fprintf(stderr, "Cannot open device %s: %s\n", dev, errbuf);
         return;
     }
 
-    // Compilăm noul filtru
+
     if (pcap_compile(main_sniffer, &fp, filter_exp, 0, net) == -1) {
-        fprintf(stderr, "Eroare filtru BPF: %s\n", pcap_geterr(main_sniffer));
+        fprintf(stderr, "BPF filter error: %s\n", pcap_geterr(main_sniffer));
         return;
     }
 
     if (pcap_setfilter(main_sniffer, &fp) == -1) {
-        fprintf(stderr, "Eroare setare filtru: %s\n", pcap_geterr(main_sniffer));
+        fprintf(stderr, "Error setting filter: %s\n", pcap_geterr(main_sniffer));
         return;
     }
 
-    pcap_setnonblock(main_sniffer, 1, errbuf);  // Non-blocking
+    pcap_setnonblock(main_sniffer, 1, errbuf);
     pcap_setdirection(main_sniffer, PCAP_D_IN);
-
-    printf("Sniffer pornit pe %s.\nFiltrez pachete SYN-ACK (Open) și RST (Closed)...\n", dev);
-    
+ 
     pcap_loop(main_sniffer, 0, syn_packet_handler, NULL);
 
     pcap_close(main_sniffer);
 }
-/*
-int main(int argc,char** argv){
-   setup_udp_sniffer("scanme.nmap.org","eth0");
-   return 0;
-}*/

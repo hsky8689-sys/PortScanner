@@ -1,16 +1,7 @@
 #include"process_management.h"
 
 void create_scan_processes(){
-   int first = parsed->first;
-   int last = parsed->last;
-   fprintf(stdout,"Scanning ports %d-%d\n",first,last);
    char* type_requested = parsed->type_scan; 
-   
-   {
-	   fprintf(stdout,"HOSTNAME:%s\nSCAN TYPE:%s\nSTARTING PORT:%d\nFINAL PORT:%d\n%d\n %d\n",parsed->hostname,
-	          parsed->type_scan,parsed->first,parsed->last,parsed->max_concurrent,parsed->timeout);
-   }
-   
    if(strcmp(type_requested,"-tcp")==0){
                 	snprintf(command,sizeof(command),
 				"./tcp_scanner %s %d %d %d %d",
@@ -18,6 +9,7 @@ void create_scan_processes(){
 				parsed->last,parsed->max_concurrent
 				,parsed->timeout);
 			system(command);
+
    }
    else if(strcmp(type_requested,"-udp")==0){
        			snprintf(command,sizeof(command),
@@ -26,26 +18,23 @@ void create_scan_processes(){
                                 parsed->last,parsed->max_concurrent
                                 ,parsed->timeout);
 			for(int i=0;i<DEFAULT_RETRY;i++){
-				printf("🚀 Executing: '%s'\n", command);
            			system(command);
 			}
    }
    else if(strcmp(type_requested,"-syn")==0 || strcmp(type_requested,"-fyn")==0 || strcmp(type_requested,"-null")==0 || strcmp(type_requested,"xmas")==0){
 	strcpy(type_requested,type_requested+1);
 	snprintf(command,sizeof(command),"sudo ./raw_scanner %s %d %d %s %d %d",parsed->hostname,parsed->first,parsed->last,type_requested,parsed->max_concurrent,parsed->timeout);
-        for(int i=0;i<DEFAULT_RETRY;i++){
-	   printf("🚀 Executing: '%s'\n", command);  
+        for(int i=0;i<DEFAULT_RETRY;i++){  
 	   system(command);
         }
    }
 }
 void worker(int task_id){
-    fprintf(stdout,"Requesting task type %d\n",task_id);
     switch(task_id)
     {
 	    case task_scan:{
  	       if(init_shared_memory()<0){
-      		perror("nu s-a initializat memoria");
+      		perror("memory didn't initialize");
       		_exit(1);
    	       }
 

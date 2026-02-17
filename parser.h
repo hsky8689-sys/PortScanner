@@ -14,7 +14,7 @@
 #define task_write 5
 #define task_exit 6
 #define DEFAULT_COMMAND task_scan
-#define DEFAULT_RETRY 5
+#define DEFAULT_RETRY 8
 #define MIN_PORT 1
 #define MAX_PORT 65535
 #define MAX_CHARACTERS 50000

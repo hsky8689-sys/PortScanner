@@ -41,8 +41,6 @@ int split_command(char command[MAX_CHARACTERS]){
 }
 
 int parse_scan_request(char command[MAX_CHARACTERS],struct parsed_input *res){
-        //command[strcspn(command, "\r\n")] = 0;
-
         ok_input = 1;
         res->command_type = task_scan;
 
@@ -124,12 +122,6 @@ struct parsed_input* parse(char command[MAX_CHARACTERS]) {
 
     for (size_t i = 0; i < len; i++) {
         command[i] = (char)tolower((unsigned char)command[i]);
-    }
-
-    // check scan type request (nu permiți -tcp și -udp simultan)
-    if (parse_scan_request(command, result) == 0){
-            //fprintf(stdout,"result = null");
-            //free(result);
     }
 
     return result;
